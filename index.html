@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>webslides template</title>
+    <style>
+      #app-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        background: #ffffff;
+        opacity: 1;
+        transition: opacity 0.5s ease;
+        font-family:
+          "Segoe UI",
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          Arial,
+          sans-serif;
+      }
+      #app-loader.is-hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #app-loader .app-loader-lockup {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        height: 34px;
+      }
+      #app-loader .app-loader-lockup img {
+        height: 100%;
+        width: auto;
+        object-fit: contain;
+      }
+      #app-loader .app-loader-x {
+        font-size: 14px;
+        font-weight: 600;
+        color: #9ca3af;
+      }
+      #app-loader .app-loader-track {
+        position: relative;
+        width: 184px;
+        height: 3px;
+        border-radius: 999px;
+        background: #e5e7eb;
+        overflow: hidden;
+      }
+      #app-loader .app-loader-track::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        width: 40%;
+        border-radius: 999px;
+        background: #111111;
+        animation: app-loader-slide 1.15s ease-in-out infinite;
+      }
+      #app-loader .app-loader-caption {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: #111111;
+      }
+      @keyframes app-loader-slide {
+        0% {
+          transform: translateX(-100%);
+        }
+        100% {
+          transform: translateX(360%);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #app-loader .app-loader-track::after {
+          animation-duration: 2.4s;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div
+      id="app-loader"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading presentation"
+    >
+      <div class="app-loader-lockup">
+        <img src="/microsoft.svg" alt="Microsoft" />
+        <span class="app-loader-x" aria-hidden="true">&times;</span>
+        <img src="/account.svg" alt="Account" />
+      </div>
+      <div class="app-loader-track" aria-hidden="true"></div>
+      <span class="app-loader-caption">Loading</span>
+    </div>
+    <script>
+      window.__hideAppLoader = function () {
+        var loader = document.getElementById("app-loader");
+        if (!loader || loader.classList.contains("is-hidden")) return;
+        loader.classList.add("is-hidden");
+        window.setTimeout(function () {
+          if (loader.parentNode) loader.parentNode.removeChild(loader);
+        }, 550);
+      };
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
