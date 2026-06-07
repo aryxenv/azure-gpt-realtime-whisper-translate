@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AgentDrivenAuthoring } from "@/components/slides/agent-driven-authoring/main";
 import { EmbeddedDemoWorkflow } from "@/components/slides/embedded-demo-workflow/main";
 import { PickPolishCustomization } from "@/components/slides/pick-polish-customization/main";
+import { RealtimeTranscriptionDemo } from "@/components/slides/realtime-transcription-demo/main";
 import { WebslidesIntroduction } from "@/components/slides/webslides-introduction/main";
 import type { SlideProps } from "@/components/slides/types";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,12 @@ const slides: SlideDefinition[] = [
     label: "Embedded demo workflow",
     Component: EmbeddedDemoWorkflow,
     cycleItems: 4,
+  },
+  {
+    id: "realtime-transcription-demo",
+    label: "Realtime transcription demo",
+    Component: RealtimeTranscriptionDemo,
+    cycleItems: 0,
   },
   {
     id: "pick-polish-customization",
