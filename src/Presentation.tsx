@@ -1,11 +1,11 @@
 import type { ComponentType } from "react";
 import { useCallback, useEffect, useState } from "react";
-import { AgentDrivenAuthoring } from "@/components/slides/agent-driven-authoring/main";
-import { EmbeddedDemoWorkflow } from "@/components/slides/embedded-demo-workflow/main";
-import { PickPolishCustomization } from "@/components/slides/pick-polish-customization/main";
+import { AudioModelLandscape } from "@/components/slides/audio-model-landscape/main";
+import { FoundryCostEstimate } from "@/components/slides/foundry-cost-estimate/main";
+import { RealtimeSolutionOverview } from "@/components/slides/realtime-solution-overview/main";
 import { RealtimeTranslationDemo } from "@/components/slides/realtime-translation-demo/main";
 import { RealtimeTranscriptionDemo } from "@/components/slides/realtime-transcription-demo/main";
-import { WebslidesIntroduction } from "@/components/slides/webslides-introduction/main";
+import { RealtimeVoiceOpportunity } from "@/components/slides/realtime-voice-opportunity/main";
 import type { SlideProps } from "@/components/slides/types";
 import { Button } from "@/components/ui/button";
 import { ExportDialog } from "@/components/ui/export-dialog";
@@ -33,21 +33,15 @@ interface SlideDefinition {
 
 const slides: SlideDefinition[] = [
   {
-    id: "webslides-introduction",
-    label: "Webslides introduction",
-    Component: WebslidesIntroduction,
-    cycleItems: 3,
+    id: "realtime-voice-opportunity",
+    label: "Realtime voice opportunity",
+    Component: RealtimeVoiceOpportunity,
+    cycleItems: 2,
   },
   {
-    id: "agent-driven-authoring",
-    label: "Agent-driven authoring",
-    Component: AgentDrivenAuthoring,
-    cycleItems: 4,
-  },
-  {
-    id: "embedded-demo-workflow",
-    label: "Embedded demo workflow",
-    Component: EmbeddedDemoWorkflow,
+    id: "audio-model-landscape",
+    label: "Audio model landscape",
+    Component: AudioModelLandscape,
     cycleItems: 4,
   },
   {
@@ -63,10 +57,16 @@ const slides: SlideDefinition[] = [
     cycleItems: 0,
   },
   {
-    id: "pick-polish-customization",
-    label: "Pick and polish customization",
-    Component: PickPolishCustomization,
-    cycleItems: 3,
+    id: "realtime-solution-overview",
+    label: "Realtime solution overview",
+    Component: RealtimeSolutionOverview,
+    cycleItems: 0,
+  },
+  {
+    id: "foundry-cost-estimate",
+    label: "Foundry cost estimate",
+    Component: FoundryCostEstimate,
+    cycleItems: 2,
   },
 ];
 

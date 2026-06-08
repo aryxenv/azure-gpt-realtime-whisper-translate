@@ -94,8 +94,8 @@ function StreamPane({
   const hasText = text.trim().length > 0;
 
   return (
-    <Card className="flex min-w-0 flex-col overflow-hidden">
-      <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
+    <Card className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+      <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-5 sm:py-4">
         <div className="min-w-0">
           <p className="font-semibold">{title}</p>
           <p className="text-xs text-muted-foreground">{subtitle}</p>
@@ -106,14 +106,14 @@ function StreamPane({
       </div>
       <div
         ref={scrollRef}
-        className="min-h-[16rem] flex-1 overflow-y-auto p-5 lg:min-h-0"
+        className="max-h-[45dvh] min-h-[12rem] min-w-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:min-h-[16rem] sm:p-5 xl:max-h-none xl:min-h-0"
       >
         {hasText ? (
-          <p className="whitespace-pre-wrap text-2xl leading-relaxed tracking-[-0.02em]">
+          <p className="whitespace-pre-wrap break-words text-xl leading-relaxed tracking-[-0.02em] [overflow-wrap:anywhere] sm:text-2xl">
             {text}
           </p>
         ) : (
-          <div className="flex h-full min-h-[13rem] items-center justify-center rounded-lg border border-dashed border-border bg-muted p-6 text-center">
+          <div className="flex h-full min-h-[9rem] items-center justify-center rounded-lg border border-dashed border-border bg-muted p-4 text-center sm:min-h-[13rem] sm:p-6">
             <p className="max-w-sm text-sm leading-6 text-muted-foreground">
               {emptyText}
             </p>
@@ -285,16 +285,16 @@ export function RealtimeTranslationDemo({ isActive }: SlideProps) {
   return (
     <SlideFrame
       eyebrow="Realtime translation"
-      title="Speak once. Stream transcript and translation together."
+      title="Stream transcript and translation together."
       titleClassName="lg:whitespace-normal"
     >
-      <div className="grid grid-cols-1 gap-6 xl:h-full xl:min-h-0 xl:grid-cols-[0.75fr_1fr_1fr]">
-        <Card className="flex min-w-0 flex-col justify-between gap-6 p-6">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 xl:h-full xl:min-h-0 xl:grid-cols-[0.75fr_1fr_1fr] xl:overflow-hidden">
+        <Card className="flex min-h-0 min-w-0 flex-col justify-between gap-5 p-4 sm:gap-6 sm:p-6">
           <div>
             <Badge variant={isListening ? "default" : "outline"}>
               {isListening ? "Translating" : "Local demo"}
             </Badge>
-            <p className="mt-5 text-2xl font-semibold tracking-[-0.03em]">
+            <p className="mt-4 text-xl font-semibold tracking-[-0.03em] sm:mt-5 sm:text-2xl">
               Browser mic to GPT Realtime Translate.
             </p>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
@@ -310,7 +310,7 @@ export function RealtimeTranslationDemo({ isActive }: SlideProps) {
                 Target language
               </span>
               <select
-                className="h-12 w-full rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+                className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-primary disabled:cursor-not-allowed disabled:opacity-60 sm:h-12"
                 disabled={isBusy || isListening}
                 onChange={(event) => setTargetLanguage(event.target.value)}
                 value={targetLanguage}
@@ -325,7 +325,7 @@ export function RealtimeTranslationDemo({ isActive }: SlideProps) {
 
             <Button
               className={cn(
-                "h-16 w-full rounded-full text-base",
+                "h-14 w-full rounded-full text-base sm:h-16",
                 isListening &&
                   "bg-foreground text-background hover:bg-foreground/90",
               )}
@@ -349,7 +349,7 @@ export function RealtimeTranslationDemo({ isActive }: SlideProps) {
                   : status}
             </p>
             {error ? (
-              <p className="rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
+              <p className="break-words rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
                 {error}
               </p>
             ) : null}

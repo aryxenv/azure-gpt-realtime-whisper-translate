@@ -1,0 +1,13 @@
+name: gpt-realtime-whisper-translate
+infra:
+  provider: bicep
+hooks:
+  postprovision:
+    windows:
+      shell: pwsh
+      run: ./scripts/azd/write-server-env.ps1
+      interactive: false
+    posix:
+      shell: sh
+      run: ./scripts/azd/write-server-env.sh
+      interactive: false

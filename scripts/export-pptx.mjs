@@ -7,7 +7,10 @@ import JSZip from "jszip";
 const require = createRequire(import.meta.url);
 const pptxgen = require("pptxgenjs");
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
 const defaultOutput = path.join(repoRoot, "exports", "webslides.pptx");
 
 function readOption(name, fallback) {
@@ -93,8 +96,8 @@ pptx.defineLayout({ name: "WEB_WIDE", width: 13.333, height: 7.5 });
 pptx.layout = "WEB_WIDE";
 pptx.author = "GitHub Copilot";
 pptx.company = "Microsoft";
-pptx.subject = "Webslides export";
-pptx.title = "Webslides";
+pptx.subject = "GPT Realtime Whisper and Translate on Azure";
+pptx.title = "GPT Realtime Whisper + Translate on Azure";
 pptx.lang = "en-US";
 pptx.theme = {
   headFontFace: "Segoe UI",
@@ -287,6 +290,7 @@ function addCardText(slide, text, x, y, w, h, opts = {}) {
     align: opts.align ?? "left",
     charSpacing: opts.charSpacing,
     paraSpaceAfterPt: 0,
+    hyperlink: opts.hyperlink,
   });
 }
 
@@ -325,407 +329,586 @@ function addProgressBar(slide, x, y, w, fillW) {
   });
 }
 
-function slideIntro() {
-  const slide = pptx.addSlide();
-  addHeader(slide, "Webslides template", "A slide deck, built like a web app.", 1.85);
+function addSource(slide, label, url, y = 6.94) {
+  addCardText(slide, `${label}: ${url}`, 0.39, y, 12.2, 0.12, {
+    fontSize: 6.1,
+    color: C.mutedText,
+    fit: "shrink",
+  });
+}
 
-  addBadge(slide, "Template concept", 0.39, 3.28, 0.86, "outline");
+function slideOpportunity() {
+  const slide = pptx.addSlide();
+  const addModelTag = (text, x, y, w) => {
+    addRoundRect(slide, x, y, w, 0.22, {
+      fill: C.bg,
+      line: C.border,
+      width: 0.6,
+    });
+    addCardText(slide, text, x + 0.04, y + 0.055, w - 0.08, 0.1, {
+      fontFace: font.mono,
+      fontSize: 6.6,
+      bold: true,
+      fit: "shrink",
+    });
+  };
+
+  addHeader(
+    slide,
+    "Realtime speech AI",
+    "Realtime AI transcription and translation.",
+    1.34,
+  );
+
+  addBadge(
+    slide,
+    "Microsoft Foundry + Azure OpenAI",
+    0.39,
+    2.7,
+    1.82,
+    "outline",
+  );
   addCardText(
     slide,
-    "Put demos, data, and live components directly in the story you\npresent.",
+    "Transcribing and translating in realtime with AI.",
     0.39,
-    3.66,
+    3.08,
     6.8,
-    0.92,
+    0.7,
     { fontSize: 21, bold: true },
   );
+  addCardText(slide, "Use", 0.39, 4.03, 0.26, 0.1, {
+    fontSize: 9.8,
+    color: C.mutedText,
+  });
+  addModelTag("gpt-realtime-whisper", 0.72, 3.96, 1.62);
+  addCardText(slide, "and", 2.42, 4.03, 0.28, 0.1, {
+    fontSize: 9.8,
+    color: C.mutedText,
+  });
+  addModelTag("gpt-realtime-translate", 2.76, 3.96, 1.72);
   addCardText(
     slide,
-    "The deck is React, Tailwind, and your own component system. If it runs on the\nweb, it can live inside a slide.",
+    "for multilingual, LLM-based realtime transcription and translation on Azure through Microsoft Foundry.",
     0.39,
-    4.7,
-    4.2,
-    0.34,
+    4.32,
+    5.3,
+    0.28,
     { fontSize: 9.8, color: C.mutedText },
   );
-  addButton(slide, "See a deployed example \u2192", 0.39, 5.2, 1.42, "outline");
-
-  addCardText(slide, "CONTROLS", 7.44, 3.3, 1.2, 0.12, {
-    fontSize: 7.2,
-    bold: true,
-    color: C.mutedText,
-    charSpacing: 3,
-  });
 
   [
     {
-      key: "\u2190 / \u2192",
-      title: "Move through the deck",
-      detail: "Arrow keys step between slides.",
+      metric: "Transcribe",
+      title: "gpt-realtime-whisper",
+      detail:
+        "Stream live speech-to-text deltas while the speaker is still talking.",
+      source: "Source: Foundry audio models",
+      sourceUrl:
+        "https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-models/concepts/models-sold-directly-by-azure?pivots=azure-openai#audio-models",
       active: true,
     },
     {
-      key: "SPACE",
-      title: "Cycle inside a slide",
-      detail: "Moves the accent across local elements.",
-      active: false,
-    },
-    {
-      key: "SWIPE",
-      title: "Navigate on mobile",
-      detail: "Swipe left or right to move between slides.",
+      metric: "Translate",
+      title: "gpt-realtime-translate",
+      detail:
+        "Stream source transcript and translated output from one microphone session.",
+      source: "Source: Foundry audio models",
+      sourceUrl:
+        "https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-models/concepts/models-sold-directly-by-azure?pivots=azure-openai#audio-models",
       active: false,
     },
   ].forEach((card, index) => {
-    const y = 3.47 + index * 0.64;
-    addRoundRect(slide, 7.44, y, 5.5, 0.55, {
+    const y = 2.85 + index * 1.12;
+    addRoundRect(slide, 7.15, y, 5.8, 0.92, {
       line: card.active ? C.fg : C.border,
       width: card.active ? 1.25 : 0.9,
     });
-    addButton(
+    addBadge(
       slide,
-      card.key,
-      7.57,
-      y + 0.18,
-      0.56,
-      card.active ? "dark" : "outline",
+      card.metric,
+      12.25,
+      y + 0.15,
+      0.5,
+      card.active ? "dark" : "muted",
     );
-    addCardText(slide, card.title, 8.24, y + 0.16, 2.3, 0.14, {
+    addCardText(slide, card.title, 7.34, y + 0.17, 2.8, 0.14, {
       fontSize: 9.2,
       bold: true,
     });
-    addCardText(slide, card.detail, 8.24, y + 0.32, 3.2, 0.12, {
+    addCardText(slide, card.detail, 7.34, y + 0.37, 4.5, 0.18, {
       fontSize: 8.1,
       color: C.mutedText,
     });
+    addCardText(slide, card.source, 7.34, y + 0.67, 2.1, 0.1, {
+      fontSize: 6.8,
+      bold: true,
+      color: C.fg,
+      hyperlink: { url: card.sourceUrl },
+    });
   });
+
+  addSource(
+    slide,
+    "Source",
+    "https://learn.microsoft.com/en-us/azure/ai-foundry/openai/how-to/realtime-audio",
+  );
 }
 
-function slideAuthoring() {
+function slideLandscape() {
   const slide = pptx.addSlide();
   addHeader(
     slide,
-    "Agent-driven authoring",
-    "Customize the deck by asking for it.",
-    2.25,
+    "Model landscape",
+    "The spotlight is on Whisper and Translate; the rest is comparison context.",
+    1.78,
   );
 
-  addRoundRect(slide, 0.39, 3.0, 5.24, 2.58, {
+  addRoundRect(slide, 0.39, 1.62, 7.25, 5.0);
+  addCardText(slide, "Audio model map", 0.62, 1.88, 1.4, 0.12, {
+    fontSize: 9,
+    bold: true,
+  });
+  addCardText(
+    slide,
+    "Hero models are highlighted; nearby models explain positioning.",
+    0.62,
+    2.08,
+    4.0,
+    0.1,
+    { fontSize: 7.4, color: C.mutedText },
+  );
+  addBadge(slide, "Focus: 2 models", 6.28, 1.86, 1.08, "dark");
+  addRoundRect(slide, 0.62, 2.36, 6.78, 3.88, {
+    fill: C.muted,
     line: C.border,
-    width: 0.75,
+    width: 0.6,
   });
   slide.addShape(S.line, {
-    x: 0.39,
-    y: 3.29,
-    w: 5.24,
+    x: 1.36,
+    y: 5.9,
+    w: 5.72,
     h: 0,
-    line: { color: C.border, width: 0.45 },
+    line: { color: C.border, width: 0.65 },
   });
-  [0.54, 0.66, 0.78].forEach((x) => {
-    slide.addShape(S.ellipse, {
-      x,
-      y: 3.12,
-      w: 0.065,
-      h: 0.065,
-      fill: { color: "CFCFCF" },
-      line: { color: "CFCFCF", transparency: 100 },
+  slide.addShape(S.line, {
+    x: 1.36,
+    y: 2.62,
+    w: 0,
+    h: 3.28,
+    line: { color: C.border, width: 0.65 },
+  });
+  [
+    ["Voice-agent\ncontext", 0.75, 2.78],
+    ["Translated\ntranscript", 0.75, 4.15],
+    ["Transcript", 0.75, 5.55],
+  ].forEach(([label, x, y]) => {
+    addCardText(slide, label, x, y, 0.55, 0.26, {
+      fontSize: 5.6,
+      bold: true,
+      color: C.mutedText,
+      fit: "shrink",
     });
   });
-  addCardText(slide, "localhost", 0.93, 3.12, 0.6, 0.12, {
-    fontSize: 6.8,
+  addCardText(slide, "Batch file", 1.36, 6.08, 0.8, 0.1, {
+    fontSize: 6.5,
+    bold: true,
     color: C.mutedText,
   });
+  addCardText(slide, "Streaming", 3.78, 6.08, 0.8, 0.1, {
+    fontSize: 6.5,
+    bold: true,
+    color: C.mutedText,
+    align: "center",
+  });
+  addCardText(slide, "Realtime", 6.28, 6.08, 0.8, 0.1, {
+    fontSize: 6.5,
+    bold: true,
+    color: C.mutedText,
+    align: "right",
+  });
 
   [
-    ["$ npm run dev", C.mutedText],
-    ["VITE ready  \u00b7  localhost:5173", C.fg],
-    ["\u203a open the deck in GitHub Copilot App", C.mutedText],
-    ['\u203a "Create a new product demo slide"', C.fg],
-    ["\u203a iterate with Pick & Polish", C.mutedText],
-  ].forEach(([text, color], i) => {
-    addCardText(slide, text, 0.54, 3.48 + i * 0.25, 4.95, 0.12, {
-      fontFace: font.mono,
-      fontSize: 7.5,
-      color,
+    ["whisper", 1.55, 5.48, false],
+    ["gpt-4o-mini-transcribe", 2.3, 5.35, false],
+    ["gpt-4o-transcribe", 3.15, 5.1, false],
+    ["gpt-realtime-whisper", 4.95, 4.55, true],
+    ["gpt-realtime-translate", 5.82, 3.48, true],
+    ["gpt-realtime", 6.62, 2.98, false],
+  ].forEach(([name, x, y, active]) => {
+    addRoundRect(slide, x, y, active ? 1.55 : 1.35, 0.38, {
+      fill: C.bg,
+      line: active ? C.fg : C.border,
+      width: active ? 1.0 : 0.6,
+    });
+    slide.addShape(S.ellipse, {
+      x: x + 0.1,
+      y: y + 0.12,
+      w: 0.08,
+      h: 0.08,
+      fill: { color: active ? C.fg : C.mutedText },
+      line: { color: active ? C.fg : C.mutedText, transparency: 100 },
+    });
+    addCardText(slide, name, x + 0.24, y + 0.12, active ? 1.15 : 0.96, 0.1, {
+      fontSize: 6.3,
+      bold: active,
+      fit: "shrink",
     });
   });
 
   [
-    {
-      title: "Start the client",
-      command: "npm run dev",
-      detail: "Run the dev server so the deck is live locally.",
-      active: true,
-    },
-    {
-      title: "Open it in GitHub Copilot App",
-      command: "localhost:5173",
-      detail: "Point Copilot at the running deck.",
-      active: false,
-    },
-    {
-      title: "Ask for the change",
-      command: '"Add a pricing demo slide"',
-      detail: "Describe the slide, demo, or layout you want.",
-      active: false,
-    },
-    {
-      title: "Review and iterate",
-      command: '"Polish this for mobile"',
-      detail: "Refine in the browser until it feels right.",
-      active: false,
-    },
-  ].forEach((item, i) => {
-    const y = 3.0 + i * 0.67;
-    addRoundRect(slide, 5.86, y, 7.09, 0.58, {
-      line: item.active ? C.fg : C.border,
-      width: item.active ? 1.25 : 0.9,
+    ["whisper", "Audio API", "Batch file baseline", false],
+    ["gpt-4o-mini-transcribe", "Audio API", "Batch STT cost option", false],
+    ["gpt-4o-transcribe", "Audio API", "Batch STT quality option", false],
+    ["gpt-realtime-whisper", "Hero model", "Focus: live transcription", true],
+    ["gpt-realtime-translate", "Hero model", "Focus: live translation", true],
+    ["gpt-realtime", "Context only", "Adjacent voice-agent option", false],
+  ].forEach(([name, category, detail, active], i) => {
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const x = 7.86 + col * 2.58;
+    const y = 1.62 + row * 1.52;
+    addRoundRect(slide, x, y, 2.42, 1.36, {
+      line: active ? C.fg : C.border,
+      width: active ? 1.15 : 0.75,
     });
-    addNumberPill(slide, i + 1, 5.98, y + 0.12, item.active);
-    addCardText(slide, item.title, 6.31, y + 0.16, 2.9, 0.14, {
+    addCardText(slide, name, x + 0.14, y + 0.18, 2.12, 0.12, {
+      fontSize: 8.6,
+      bold: true,
+      fit: "shrink",
+    });
+    addBadge(
+      slide,
+      category,
+      x + 0.14,
+      y + 0.5,
+      active ? 0.82 : 0.92,
+      active ? "dark" : "muted",
+    );
+    addCardText(slide, detail, x + 0.14, y + 0.9, 2.05, 0.12, {
+      fontSize: 7.4,
+      color: C.mutedText,
+    });
+  });
+
+  addCardText(
+    slide,
+    "Source: https://learn.microsoft.com/en-us/azure/ai-foundry/foundry-models/concepts/models-sold-directly-by-azure#audio-models",
+    7.86,
+    6.3,
+    5.05,
+    0.14,
+    { fontSize: 6.1, color: C.mutedText, fit: "shrink" },
+  );
+}
+
+function slideTranscriptionDemo() {
+  const slide = pptx.addSlide();
+  addHeader(
+    slide,
+    "Realtime transcription",
+    "Speak once. Watch the transcript stream back.",
+    1.86,
+  );
+
+  addRoundRect(slide, 0.39, 2.72, 4.2, 2.8);
+  addBadge(slide, "Local demo", 0.6, 2.96, 0.72, "outline");
+  addCardText(
+    slide,
+    "Browser mic to GPT Realtime Whisper.",
+    0.6,
+    3.38,
+    3.2,
+    0.34,
+    { fontSize: 17, bold: true },
+  );
+  addCardText(
+    slide,
+    "Audio streams through the local FastAPI proxy to an Azure realtime transcription session.",
+    0.6,
+    3.92,
+    3.25,
+    0.35,
+    { fontSize: 9.2, color: C.mutedText },
+  );
+  addButton(slide, "Start microphone", 0.6, 4.68, 3.2, "dark");
+
+  addRoundRect(slide, 4.88, 2.72, 8.07, 2.8);
+  addCardText(slide, "Transcript", 5.1, 2.98, 1.2, 0.14, {
+    fontSize: 10,
+    bold: true,
+  });
+  addBadge(slide, "Live deltas", 11.9, 2.94, 0.7, "muted");
+  addRoundRect(slide, 5.1, 3.45, 7.58, 1.55, {
+    fill: C.muted,
+    line: C.border,
+    width: 0.6,
+    dash: "dash",
+  });
+  addCardText(
+    slide,
+    "Start the microphone and speak naturally. Transcript text appears here as the model streams it back.",
+    5.48,
+    4.02,
+    5.4,
+    0.28,
+    { fontSize: 11, color: C.mutedText, align: "center" },
+  );
+}
+
+function slideTranslationDemo() {
+  const slide = pptx.addSlide();
+  addHeader(
+    slide,
+    "Realtime translation",
+    "Speak once. Stream transcript and translation together.",
+    1.74,
+  );
+
+  addRoundRect(slide, 0.39, 2.72, 3.4, 2.95);
+  addBadge(slide, "Local demo", 0.6, 2.96, 0.72, "outline");
+  addCardText(
+    slide,
+    "Browser mic to GPT Realtime Translate.",
+    0.6,
+    3.38,
+    2.5,
+    0.42,
+    {
+      fontSize: 15,
+      bold: true,
+    },
+  );
+  addCardText(
+    slide,
+    "One audio stream returns both source transcript and translated output.",
+    0.6,
+    4.0,
+    2.45,
+    0.32,
+    {
+      fontSize: 8.8,
+      color: C.mutedText,
+    },
+  );
+  addBadge(slide, "Target: Dutch", 0.6, 4.75, 0.85, "muted");
+  addButton(slide, "Start microphone", 0.6, 5.15, 2.55, "dark");
+
+  [
+    ["Raw transcript", "Input transcript deltas", "Source"],
+    ["Translation", "Translated output deltas", "Dutch"],
+  ].forEach(([title, subtitle, badge], i) => {
+    const x = 4.05 + i * 4.45;
+    addRoundRect(slide, x, 2.72, 4.25, 2.95);
+    slide.addShape(S.line, {
+      x,
+      y: 3.2,
+      w: 4.25,
+      h: 0,
+      line: { color: C.border, width: 0.45 },
+    });
+    addCardText(slide, title, x + 0.22, 2.92, 1.5, 0.13, {
+      fontSize: 9.4,
+      bold: true,
+    });
+    addCardText(slide, subtitle, x + 0.22, 3.08, 1.7, 0.1, {
+      fontSize: 6.8,
+      color: C.mutedText,
+    });
+    addBadge(slide, badge, x + 3.26, 2.9, 0.72, "muted");
+    addRoundRect(slide, x + 0.22, 3.52, 3.82, 1.56, {
+      fill: C.muted,
+      line: C.border,
+      width: 0.6,
+      dash: "dash",
+    });
+    addCardText(
+      slide,
+      i === 0
+        ? "Source transcript stream appears here."
+        : "Translated output stream appears here.",
+      x + 0.6,
+      4.12,
+      3.0,
+      0.2,
+      { fontSize: 10, color: C.mutedText, align: "center" },
+    );
+  });
+}
+
+function slideSolutionOverview() {
+  const slide = pptx.addSlide();
+  addHeader(
+    slide,
+    "Solution overview",
+    "One demo pattern, two focused realtime model routes.",
+    2.05,
+  );
+
+  addBadge(slide, "High-level architecture", 0.39, 2.55, 1.24, "outline");
+  addCardText(
+    slide,
+    "The browser handles the presentation. The local server chooses the focused route: Whisper for transcription, Translate for bilingual output.",
+    0.39,
+    2.95,
+    5.1,
+    0.54,
+    { fontSize: 18, bold: true },
+  );
+  addCardText(
+    slide,
+    "That keeps the model story clean: two demos, two endpoint contracts, one reusable proxy pattern for Azure OpenAI in Microsoft Foundry.",
+    0.39,
+    3.74,
+    4.7,
+    0.28,
+    { fontSize: 9.2, color: C.mutedText },
+  );
+
+  [
+    ["1", "Browser mic", "Presenter speaks into the deck."],
+    ["2", "Webslides client", "Streams small audio chunks."],
+    ["3", "FastAPI proxy", "Trusted bridge to Azure."],
+    ["4", "Two model routes", "Whisper or Translate endpoint."],
+    ["5", "Slide output", "Exactly what each model streams back."],
+  ].forEach(([n, title, detail], i) => {
+    const y = 2.35 + i * 0.7;
+    addRoundRect(slide, 6.0, y, 6.95, 0.58, {
+      fill: i === 2 ? C.bg : C.muted,
+      line: i === 2 ? C.fg : C.border,
+      width: i === 2 ? 1.2 : 0.7,
+    });
+    addNumberPill(slide, n, 6.18, y + 0.17, i === 2);
+    addCardText(slide, title, 6.55, y + 0.15, 1.6, 0.12, {
+      fontSize: 8.8,
+      bold: true,
+    });
+    addCardText(slide, detail, 8.25, y + 0.15, 3.9, 0.12, {
+      fontSize: 8.2,
+      color: C.mutedText,
+    });
+  });
+
+  addSource(
+    slide,
+    "Sources",
+    "learn.microsoft.com/.../realtime-audio ; docs/realtime-technical-walkthrough.md",
+  );
+}
+
+function slideCostEstimate() {
+  const slide = pptx.addSlide();
+  addHeader(
+    slide,
+    "Cost estimate",
+    "Estimate the two demo models directly: live transcription and live translation.",
+    1.62,
+  );
+
+  addBadge(
+    slide,
+    "Azure OpenAI list-price framing",
+    0.39,
+    2.48,
+    1.72,
+    "outline",
+  );
+  [
+    [
+      "gpt-realtime-whisper",
+      "$1.02 / hour",
+      "$102 for 100 live audio hours",
+      true,
+    ],
+    [
+      "gpt-realtime-translate",
+      "$2.04 / hour",
+      "$204 for 100 live audio hours",
+      false,
+    ],
+  ].forEach(([model, price, example, active], i) => {
+    const y = 2.9 + i * 1.28;
+    addRoundRect(slide, 0.39, y, 5.85, 1.05, {
+      line: active ? C.fg : C.border,
+      width: active ? 1.2 : 0.8,
+    });
+    addCardText(slide, model, 0.62, y + 0.2, 2.3, 0.13, {
       fontSize: 9,
       bold: true,
     });
-    addCardText(slide, item.command, 11.35, y + 0.18, 1.45, 0.12, {
-      fontFace: font.mono,
-      fontSize: 6.8,
-      color: C.mutedText,
-      align: "right",
-    });
-    addCardText(slide, item.detail, 6.31, y + 0.35, 4.4, 0.12, {
-      fontSize: 8.2,
-      color: C.mutedText,
-    });
-  });
-}
-
-function slideEmbeddedDemo() {
-  const slide = pptx.addSlide();
-  addHeader(
-    slide,
-    "Embedded demo workflow",
-    "Demos live inside the presentation.",
-    2.34,
-  );
-
-  addRoundRect(slide, 0.39, 2.7, 6.2, 1.25, {
-    line: C.fg,
-    width: 1.2,
-  });
-  addBadge(slide, "@your_demo_slide", 0.54, 2.85, 0.9, "dark");
-  addCardText(slide, "Drop a folder in, reference it in Copilot.", 0.54, 3.19, 4.3, 0.17, {
-    fontSize: 12.5,
-    bold: true,
-  });
-  [
-    "components/slides/your_demo_slide/main.tsx",
-    "components/slides/your_demo_slide/components/panel.tsx",
-    "components/slides/your_demo_slide/data/sample.ts",
-  ].forEach((line, i) => {
-    addCardText(slide, line, 0.54, 3.45 + i * 0.14, 4.8, 0.1, {
-      fontFace: font.mono,
-      fontSize: 6.4,
-      color: C.mutedText,
-    });
-  });
-
-  addRoundRect(slide, 0.39, 4.08, 6.2, 0.67);
-  addCardText(slide, "Server-backed demos", 0.54, 4.26, 1.3, 0.13, {
-    fontSize: 8.2,
-    bold: true,
-  });
-  addCardText(
-    slide,
-    "Need server logic? Copilot moves it into a server folder and exposes a route the slide calls from the client.",
-    0.54,
-    4.47,
-    5.2,
-    0.15,
-    { fontSize: 8, color: C.mutedText },
-  );
-
-  addRoundRect(slide, 0.39, 4.86, 6.2, 1.03);
-  addCardText(slide, "Live server call", 0.54, 5.05, 1.2, 0.13, {
-    fontSize: 8.2,
-    bold: true,
-  });
-  addBadge(slide, "GET /health", 5.82, 5.0, 0.62, "muted");
-  slide.addShape(S.ellipse, {
-    x: 0.54,
-    y: 5.32,
-    w: 0.055,
-    h: 0.055,
-    fill: { color: C.fg },
-    line: { color: C.fg, transparency: 100 },
-  });
-  addCardText(slide, "Server healthy!", 0.65, 5.29, 1.2, 0.12, {
-    fontFace: font.mono,
-    fontSize: 6.8,
-    color: C.mutedText,
-  });
-  addCardText(slide, "http://localhost:8000", 0.54, 5.58, 1.3, 0.11, {
-    fontFace: font.mono,
-    fontSize: 6.2,
-    color: C.mutedText,
-  });
-  addButton(slide, "Call again", 5.88, 5.51, 0.55, "outline");
-
-  addRoundRect(slide, 6.76, 2.7, 6.19, 3.19);
-  slide.addShape(S.line, {
-    x: 6.76,
-    y: 3.12,
-    w: 6.19,
-    h: 0,
-    line: { color: C.border, width: 0.45 },
-  });
-  addCardText(slide, "Embedded app fragment", 6.88, 2.87, 1.7, 0.14, {
-    fontSize: 9.2,
-    bold: true,
-  });
-  addBadge(slide, "Prototype", 12.27, 2.82, 0.55, "muted");
-
-  addButton(slide, "Prototype", 6.91, 3.26, 1.93, "dark");
-  addButton(slide, "Demo", 8.88, 3.26, 1.93, "outline");
-  addButton(slide, "Narrative", 10.87, 3.26, 1.93, "outline");
-
-  addRoundRect(slide, 6.91, 3.62, 5.89, 0.68, {
-    fill: C.muted,
-    line: C.border,
-    width: 0.55,
-  });
-  [
-    ["Prototype", 5.12],
-    ["Demo", 1.7],
-    ["Narrative", 1.7],
-  ].forEach(([label, barWidth], i) => {
-    const y = 3.77 + i * 0.17;
-    addCardText(slide, label, 7.02, y - 0.01, 0.45, 0.1, {
-      fontSize: 6.6,
-      color: C.mutedText,
-    });
-    addProgressBar(slide, 7.55, y, 5.12, barWidth);
-  });
-  addCardText(
-    slide,
-    "Real controls keep working \u2014 deck navigation ignores inputs and interactive elements.",
-    6.91,
-    4.49,
-    5.5,
-    0.14,
-    { fontSize: 8.3, color: C.mutedText },
-  );
-}
-
-function slidePolish() {
-  const slide = pptx.addSlide();
-  addHeader(slide, "Customization system", "Pick, polish, and keep control.", 2.04);
-
-  addCardText(slide, "SHARED DESIGN SYSTEM", 0.39, 3.13, 2.8, 0.14, {
-    fontSize: 7.2,
-    bold: true,
-    color: C.mutedText,
-    charSpacing: 2.4,
-  });
-
-  [
-    ["components/ui", "Shared frame, cards, badges, and buttons.", true],
-    ["index.css", "Monochrome tokens for color, borders, and accents.", false],
-    ["components/slides", "Self-contained slide folders in deck order.", false],
-  ].forEach(([name, detail, active], i) => {
-    const y = 3.32 + i * 0.54;
-    addRoundRect(slide, 0.39, y, 5.88, 0.43, {
-      line: active ? C.fg : C.border,
-      width: active ? 1.2 : 0.9,
-    });
-    const badgeW =
-      name === "components/slides" ? 0.92 : name === "components/ui" ? 0.9 : 0.7;
-    addBadge(slide, name, 0.52, y + 0.13, badgeW, active ? "dark" : "outline");
-    addCardText(slide, detail, 0.52 + badgeW + 0.22, y + 0.16, 3.8, 0.12, {
-      fontSize: 8.2,
-      color: C.mutedText,
-    });
-  });
-
-  addRoundRect(slide, 6.44, 3.1, 6.51, 2.39);
-  slide.addShape(S.line, {
-    x: 6.44,
-    y: 3.38,
-    w: 6.51,
-    h: 0,
-    line: { color: C.border, width: 0.45 },
-  });
-  addCardText(slide, "PICK & POLISH", 6.59, 3.22, 1.3, 0.12, {
-    fontSize: 7,
-    bold: true,
-    color: C.mutedText,
-    charSpacing: 2.2,
-  });
-
-  addRoundRect(slide, 6.59, 3.54, 6.2, 0.63, {
-    line: C.fg,
-    width: 1,
-    dash: "dash",
-  });
-  addCardText(slide, "Selected slide element", 6.71, 3.7, 2, 0.15, {
-    fontSize: 11,
-    bold: true,
-  });
-  addCardText(
-    slide,
-    "Target one card or section instead of rewriting the slide.",
-    6.71,
-    3.93,
-    3.6,
-    0.12,
-    { fontSize: 8.1, color: C.mutedText },
-  );
-
-  [
-    "Select an element in GitHub Copilot App.",
-    "Describe the change in plain language.",
-    "Review locally and keep iterating.",
-  ].forEach((step, i) => {
-    const y = 4.28 + i * 0.25;
-    slide.addShape(S.ellipse, {
-      x: 6.59,
-      y,
-      w: 0.2,
-      h: 0.2,
-      fill: { color: C.fg },
-      line: { color: C.fg, transparency: 100 },
-    });
-    addCardText(slide, String(i + 1), 6.59, y + 0.045, 0.2, 0.08, {
-      fontSize: 6.4,
+    addCardText(slide, price, 0.62, y + 0.42, 2.0, 0.18, {
+      fontSize: 17,
       bold: true,
-      color: C.bg,
-      align: "center",
     });
-    addCardText(slide, step, 6.86, y + 0.05, 3, 0.11, {
-      fontSize: 8.1,
+    addCardText(slide, example, 0.62, y + 0.72, 2.2, 0.12, {
+      fontSize: 8,
       color: C.mutedText,
     });
   });
 
-  slide.addShape(S.line, {
-    x: 6.59,
-    y: 5.08,
-    w: 6.2,
-    h: 0,
-    line: { color: C.border, width: 0.45 },
-  });
-  addCardText(slide, "The limit goes beyond the sky.", 6.59, 5.24, 2.2, 0.12, {
-    fontSize: 8.3,
-    bold: true,
-  });
+  addRoundRect(slide, 6.55, 2.48, 6.4, 2.68);
+  addBadge(slide, "Scope", 6.78, 2.72, 0.52, "muted");
+  addCardText(
+    slide,
+    "Only the two showcased models are estimated here.",
+    6.78,
+    3.15,
+    4.6,
+    0.3,
+    {
+      fontSize: 9.5,
+      bold: true,
+    },
+  );
+  addCardText(
+    slide,
+    "Batch transcribe models and full voice-agent models are useful comparison points on the landscape slide, but they are not part of this demo estimate.",
+    6.78,
+    3.62,
+    5.55,
+    0.54,
+    { fontSize: 8.5, color: C.mutedText },
+  );
+
+  addRoundRect(slide, 6.55, 5.34, 6.4, 0.8);
+  addCardText(
+    slide,
+    "Use this as a planning estimate, not a bill.",
+    6.78,
+    5.55,
+    2.9,
+    0.12,
+    {
+      fontSize: 8.6,
+      bold: true,
+    },
+  );
+  addCardText(
+    slide,
+    "Validate region, deployment type, agreement, and date in the Azure Pricing Calculator or customer contract.",
+    6.78,
+    5.75,
+    5.4,
+    0.14,
+    { fontSize: 7.5, color: C.mutedText },
+  );
+
+  addSource(
+    slide,
+    "Source",
+    "https://azure.microsoft.com/en-us/pricing/details/azure-openai/",
+  );
 }
 
 const outputPath = resolveOutput(readOption("--output", defaultOutput));
 await mkdir(path.dirname(outputPath), { recursive: true });
 
-slideIntro();
-slideAuthoring();
-slideEmbeddedDemo();
-slidePolish();
+slideOpportunity();
+slideLandscape();
+slideTranscriptionDemo();
+slideTranslationDemo();
+slideSolutionOverview();
+slideCostEstimate();
 
 await pptx.writeFile({ fileName: outputPath });
 await cleanPptxPackage(outputPath);

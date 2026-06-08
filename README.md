@@ -1,140 +1,146 @@
-# Webslides template
+# GPT Realtime Whisper + Translate on Azure
 
-React + Vite + Tailwind starter for building slide decks as web applications.
-Each slide can be a self-contained mini-app while sharing the presentation UI
-system in `src/components/ui`.
+This repo is a pitch-ready Webslides deck for explaining and demonstrating the
+new `gpt-realtime-whisper` and `gpt-realtime-translate` models on Azure using
+Microsoft Foundry.
 
-Inspired & driven by...
+The deck is meant for customer conversations, internal demos, and solution
+walkthroughs where the story matters as much as the technology. It combines
+slides, speaker-friendly copy, and a built-in browser microphone demo so a
+presenter can show the models live without leaving the presentation.
 
-- Github Copilot App "Pick & Polish" feature.
-- Powerful models & reasoning of Github Copilot.
-- In-slide demos to deliver presentations in a unique & powerful way.
+## What the demo shows
 
-## Run locally
+- **Realtime transcription**: browser microphone audio streams to
+  `gpt-realtime-whisper`, and transcript text appears live in the slide.
+- **Realtime translation**: one microphone stream produces both the raw source
+  transcript and translated output side by side using `gpt-realtime-translate`.
+- **Foundry-ready architecture**: the browser talks to a local FastAPI proxy,
+  which connects to Azure OpenAI Realtime endpoints.
+- **Presenter workflow**: run the interactive deck locally, export private
+  PDF/PPTX versions, or publish the static slide deck when the content is safe to
+  share publicly.
 
-### Client (Presentation)
+For the detailed behind-the-scenes flow, protocol differences, and source-linked
+walkthrough, see
+[`docs/realtime-technical-walkthrough.md`](docs/realtime-technical-walkthrough.md).
+
+## Getting started
+
+### 1. Prerequisites
+
+- Node.js and npm for the Webslides deck.
+- Python 3.13 and `uv` for the local FastAPI demo server.
+- Azure CLI and Azure Developer CLI (`azd`) for provisioning Azure OpenAI.
+- An Azure identity that can create Azure OpenAI resources and role assignments.
+
+### 2. Provision the Foundry models
+
+This repo includes azd-deployable Bicep infrastructure in `infra/`. It creates an
+Azure OpenAI resource in **France Central** and deploys:
+
+- `gpt-realtime-whisper` version `2026-05-06`
+- `gpt-realtime-translate` version `2026-05-06`
+
+Before running provisioning, confirm the subscription has available
+GlobalStandard realtime model quota in France Central. If another deployment
+already consumes the quota, keep using that existing resource or free capacity
+outside this workflow before running `azd up`.
+
+Sign in, create/select an azd environment, then provision:
+
+```pwsh
+azd auth login
+az login
+azd env new realtime-speech-demo
+azd up
+```
+
+During `azd up`, Bicep outputs are captured into the azd environment. The
+post-provision hook then updates `server/.env` with the created resource name and
+deployment names:
+
+```env
+AZURE_OPENAI_RESOURCE_NAME=<created-resource-name>
+AZURE_OPENAI_REALTIME_DEPLOYMENT=gpt-realtime-whisper
+AZURE_OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate
+AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL=gpt-realtime-whisper
+```
+
+Authentication is keyless. The infrastructure assigns the current azd principal
+the `Cognitive Services OpenAI User` role on the Azure OpenAI resource so the
+server can use `DefaultAzureCredential`.
+
+### 3. Run the local demo
+
+Install and start the slide deck:
 
 ```pwsh
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173.
+Start the local demo server in a second terminal:
 
-### Server (Optional)
+```pwsh
+cd server
+uv sync
+uv run fastapi dev
+```
+
+Open http://localhost:5173 and use the realtime transcription and translation
+slides.
+
+## Run locally
+
+Start the slide deck:
+
+```pwsh
+npm install
+npm run dev
+```
+
+Start the local demo server in a second terminal:
 
 ```pwsh
 uv sync
 uv run fastapi dev
 ```
 
-Available at http://localhost:8000 (no config needed - automatically available on client)
+Open http://localhost:5173.
 
-The realtime demo slides use local WebSocket routes:
+The realtime demo requires Azure OpenAI / Microsoft Foundry configuration for
+the local server. Start from `server/.env.example`, and see `server/README.md`
+for the server-specific setup notes.
 
-- `/realtime/whisper` streams browser microphone audio to the Whisper
-  transcription session through a local proxy.
-- `/realtime/translation` streams browser microphone audio to the translation
-  session. The slide sends the selected target language when it opens the
-  websocket.
+## Demo slides
 
-## Controls
+- **Realtime transcription** uses `/realtime/whisper` and can send an optional
+  language hint for controlled single-language tests.
+- **Realtime translation** uses `/realtime/translation` and lets the presenter
+  choose the target output language.
 
-- **Left / Right arrows**: move between slides on a computer.
-- **Spacebar**: cycle the active slide's accent through local elements by
-  default. Individual slides can customize this behavior for demos.
-- **Swipe**: on phones, swipe left or right to move between slides.
+Both demos are local-first: microphone audio stays in the browser and local
+proxy path before being sent to the configured Azure Realtime endpoint.
 
-## Export locally
+## Present, export, and share
 
-The local dev presentation includes an **Export** icon in the footer. It opens a
-popup menu where each option opens its own dialog. The control is hidden from
-production builds and GitHub Pages.
+- Use arrow keys to move between slides.
+- Use swipe navigation on mobile.
+- Use the local export menu to create private files:
+  - `exports/webslides.pdf`
+  - `exports/webslides.pptx`
 
-- **PDF - Static (Private)**: starts the local FastAPI export route, renders the
-  full deck, writes `exports/webslides.pdf`, and downloads the same file.
-- **PowerPoint - Static (Private)**: starts the local FastAPI export route,
-  generates the native PowerPoint deck, writes `exports/webslides.pptx`, and
-  downloads the same file.
-- **GitHub Pages - Interactive (Public)**: use the existing Pages workflow when
-  the deck contains no customer-specific data.
+Generated files in `exports/` are ignored by git so private presentation
+artifacts are not pushed accidentally.
 
-Generated files in `exports/` are ignored by git by default so private PDF/PPTX
-artifacts do not get pushed or deployed accidentally.
+GitHub Pages can host the static slide deck, but the live FastAPI-backed demo
+only runs locally unless you point the frontend at a hosted server.
 
-For PDF and PowerPoint export, run both the client (`npm run dev`) and the server
-(`uv run fastapi dev`) locally.
+## Customize the deck
 
-PDF export uses Playwright. It first tries the local Microsoft Edge browser; if
-that is unavailable, install Playwright's browser with:
+Slides live in `src/components/slides/<slide-id>/`, shared UI primitives live in
+`src/components/ui`, and theme tokens live in `src/index.css`.
 
-```pwsh
-npx playwright install chromium
-```
-
-## Theming
-
-The demo uses a monochrome palette by default, the idea would be to modify the theme to your liking for a specific project.
-
-Simply ask Github Copilot with what you want the theme to be like, and if there is a logo for a specific account you would like, best to provide this logo as attachment.
-
-The `theming` skill will handle the changes for you.
-
-## Agent-driven authoring
-
-This template is intended to be customized with GitHub Copilot App:
-
-1. Start the client dev server with `npm run dev`.
-2. Open the local deck at http://localhost:5173 inside GitHub Copilot App.
-3. Ask for the slide, demo, layout, or copy change you want.
-4. Use Pick & Polish to select individual slide elements and make targeted
-   edits.
-
-## Build with Copilot (skills)
-
-This repo ships ready-made skills in `.github/skills/` so you don't have to
-re-explain the structure each time. Just describe what you want and Copilot
-follows the matching skill:
-
-- **Theming**: modify palette and other supported options, change account logo for `MS x Account`.
-- **Add a slide**: create a new slide as a self-contained mini-app.
-- **Edit a slide**: change copy, layout, styling, or interactions safely.
-- **Integrate demo into slides**: drop in a whole app (in the repo or shared in
-  chat) and map it into the deck, wiring up the `server/` backend if needed.
-  Slides live in `src/components/slides/<topic>/` and are listed, in order, in
-  `src/Presentation.tsx`. Folders are named by topic (not `slide_1`, `slide_2`), so
-  slides can be inserted or reordered freely. Demos that need backend logic use the
-  FastAPI app in `server/`. The skills cover the details.
-
-## Share / deploy to GitHub Pages
-
-A GitHub Actions workflow (`.github/workflows/deploy-pages.yml`) builds and
-publishes the deck to GitHub Pages automatically on every push to `main`. Once
-it's live, sharing is just `git push` — the deck is served at:
-
-```text
-https://<owner>.github.io/<repo>/
-```
-
-One-time setup in the repo: **Settings → Pages → Build and deployment →
-Source: "GitHub Actions"**. After that, no further configuration is needed — the
-workflow auto-detects the repo name for the asset base path, so the template
-deploys correctly in any repo without edits. You can also trigger it manually
-from the **Actions** tab.
-
-The active slide is stored in the URL (`?slide=<slide-id>`), so you can deep-link
-or share a specific slide, e.g. `https://<owner>.github.io/<repo>/?slide=embedded-demo-workflow`.
-
-> [!NOTE]
-> GitHub Pages is static, so the FastAPI `server/` demo only runs locally.
-> The live server-call card will show "server unavailable" on the deployed deck
-> unless you point `VITE_SERVER_URL` at a publicly hosted server.
-
-## Customize the design system
-
-- Shared UI primitives live in `src/components/ui`.
-- Theme tokens live in `src/index.css`.
-- Tailwind token mappings live in `tailwind.config.ts`.
-
-The default template is monochrome. Change the CSS variables in `src/index.css`
-to rebrand the deck without rewriting slide components.
+The deck is designed to be edited with GitHub Copilot: ask for slide copy,
+layout, theme, or demo changes, then iterate visually in the browser.

@@ -25,20 +25,49 @@ interface TranscriptServerEvent extends RealtimeTranscriptEvent {
   status?: string;
 }
 
-function getRealtimeWebSocketUrl() {
+interface LanguageOption {
+  code: string;
+  label: string;
+}
+
+const AUTO_LANGUAGE_HINT = "auto";
+
+const LANGUAGE_HINT_OPTIONS: LanguageOption[] = [
+  { code: AUTO_LANGUAGE_HINT, label: "Auto detect" },
+  { code: "nl", label: "Dutch" },
+  { code: "en", label: "English" },
+  { code: "fr", label: "French" },
+  { code: "de", label: "German" },
+  { code: "es", label: "Spanish" },
+  { code: "it", label: "Italian" },
+  { code: "pt", label: "Portuguese" },
+];
+
+function getRealtimeWebSocketUrl(languageHint: string) {
   const configuredUrl = import.meta.env.VITE_REALTIME_WS_URL as
     | string
     | undefined;
-  if (configuredUrl) {
-    return configuredUrl;
+  const baseUrl = configuredUrl || "ws://localhost:8000/realtime/whisper";
+  if (languageHint === AUTO_LANGUAGE_HINT) {
+    return baseUrl;
   }
 
-  return "ws://localhost:8000/realtime/whisper";
+  try {
+    const url = new URL(baseUrl);
+    url.searchParams.set("languageHint", languageHint);
+    return url.toString();
+  } catch {
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    return `${baseUrl}${separator}languageHint=${encodeURIComponent(
+      languageHint,
+    )}`;
+  }
 }
 
 export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [languageHint, setLanguageHint] = useState(AUTO_LANGUAGE_HINT);
   const [transcriptState, setTranscriptState] = useState(
     createTranscriptStreamState,
   );
@@ -46,7 +75,10 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const isListening = status === "listening";
   const isBusy = status === "connecting" || status === "stopping";
-  const websocketUrl = useMemo(() => getRealtimeWebSocketUrl(), []);
+  const websocketUrl = useMemo(
+    () => getRealtimeWebSocketUrl(languageHint),
+    [languageHint],
+  );
   const transcript = useMemo(
     () => getTranscriptText(transcriptState),
     [transcriptState],
@@ -167,17 +199,17 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
   return (
     <SlideFrame
       eyebrow="Realtime transcription"
-      title="Speak once. Watch the transcript stream back."
+      title="Watch the transcript stream back."
       titleClassName="lg:whitespace-normal"
     >
-      <div className="grid grid-cols-1 gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[0.8fr_1.2fr]">
-        <Card className="flex min-w-0 flex-col justify-between gap-6 p-6">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[0.8fr_1.2fr] lg:overflow-hidden">
+        <Card className="flex min-h-0 min-w-0 flex-col justify-between gap-5 p-4 sm:gap-6 sm:p-6">
           <div>
             <Badge variant={isListening ? "default" : "outline"}>
               {status === "listening" ? "Streaming" : "Local demo"}
             </Badge>
-            <p className="mt-5 text-2xl font-semibold tracking-[-0.03em]">
-              Browser mic to Azure Realtime Whisper.
+            <p className="mt-4 text-xl font-semibold tracking-[-0.03em] sm:mt-5 sm:text-2xl">
+              Browser mic to GPT Realtime Whisper.
             </p>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Audio streams through the local FastAPI websocket. The server
@@ -187,9 +219,27 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
           </div>
 
           <div className="space-y-4">
+            <label className="block space-y-2">
+              <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Language hint
+              </span>
+              <select
+                className="h-11 w-full rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground outline-none transition-colors focus:border-primary disabled:cursor-not-allowed disabled:opacity-60 sm:h-12"
+                disabled={isBusy || isListening}
+                onChange={(event) => setLanguageHint(event.target.value)}
+                value={languageHint}
+              >
+                {LANGUAGE_HINT_OPTIONS.map((option) => (
+                  <option key={option.code} value={option.code}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <Button
               className={cn(
-                "h-16 w-full rounded-full text-base",
+                "h-14 w-full rounded-full text-base sm:h-16",
                 isListening &&
                   "bg-foreground text-background hover:bg-foreground/90",
               )}
@@ -213,15 +263,15 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
                   : status}
             </p>
             {error ? (
-              <p className="rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
+              <p className="break-words rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground [overflow-wrap:anywhere]">
                 {error}
               </p>
             ) : null}
           </div>
         </Card>
 
-        <Card className="flex min-w-0 flex-col overflow-hidden">
-          <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
+        <Card className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+          <div className="flex items-center justify-between gap-4 border-b border-border px-4 py-3 sm:px-5 sm:py-4">
             <div>
               <p className="font-semibold">Transcript</p>
               <p className="text-xs text-muted-foreground">
@@ -234,14 +284,14 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
           </div>
           <div
             ref={transcriptScrollRef}
-            className="min-h-[18rem] flex-1 overflow-y-auto p-5 lg:min-h-0"
+            className="max-h-[45dvh] min-h-[13rem] min-w-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:min-h-[18rem] sm:p-5 lg:max-h-none lg:min-h-0"
           >
             {hasTranscript ? (
-              <p className="whitespace-pre-wrap text-2xl leading-relaxed tracking-[-0.02em]">
+              <p className="whitespace-pre-wrap break-words text-xl leading-relaxed tracking-[-0.02em] [overflow-wrap:anywhere] sm:text-2xl">
                 {transcript}
               </p>
             ) : (
-              <div className="flex h-full min-h-[14rem] items-center justify-center rounded-lg border border-dashed border-border bg-muted p-6 text-center">
+              <div className="flex h-full min-h-[10rem] items-center justify-center rounded-lg border border-dashed border-border bg-muted p-4 text-center sm:min-h-[14rem] sm:p-6">
                 <p className="max-w-sm text-sm leading-6 text-muted-foreground">
                   Press the microphone button and start speaking. Transcript
                   deltas and final segments will appear here.

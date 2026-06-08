@@ -64,11 +64,17 @@ Invalid type for 'session.audio.input.transcription.language': expected one of
 ```
 
 The backend therefore omits `language` by default so the model can auto-detect
-the spoken language. For controlled single-language tests, set exactly one hint:
+the spoken language. The Whisper slide can send a per-session hint with
+`languageHint=<code>`. For server-wide controlled single-language tests, set
+exactly one fallback hint:
 
 ```env
 AZURE_OPENAI_REALTIME_LANGUAGE_HINT=de
 ```
+
+This field belongs to the standalone transcription session contract. The
+translation session rejects `session.audio.input.transcription.language`, so the
+translation slide only exposes target output language selection.
 
 ## Detected language events
 

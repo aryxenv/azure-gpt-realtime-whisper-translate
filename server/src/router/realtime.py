@@ -34,11 +34,36 @@ logger = logging.getLogger(__name__)
 DEFAULT_TRANSLATION_MODEL = "gpt-realtime-translate"
 DEFAULT_TRANSLATION_INPUT_TRANSCRIPTION_MODEL = "gpt-realtime-whisper"
 DEFAULT_TRANSLATION_LANGUAGE = "nl"
+DEFAULT_LANGUAGE_HINT = "auto"
 DEFAULT_WHISPER_COMMIT_STRATEGY = "silence"
 DEFAULT_WHISPER_TURN_DETECTION = "none"
 SUPPORTED_TRANSCRIPTION_DELAYS = {"minimal", "low", "medium", "high", "xhigh"}
 SUPPORTED_WHISPER_TURN_DETECTION = {"none", "server_vad", "semantic_vad"}
 SUPPORTED_WHISPER_COMMIT_STRATEGIES = {"fixed", "none", "silence"}
+SUPPORTED_LANGUAGE_HINTS = {
+    "bg",
+    "cs",
+    "da",
+    "de",
+    "el",
+    "en",
+    "es",
+    "et",
+    "fi",
+    "fr",
+    "hr",
+    "hu",
+    "it",
+    "lt",
+    "lv",
+    "nl",
+    "pl",
+    "pt",
+    "ro",
+    "sk",
+    "sl",
+    "sv",
+}
 SUPPORTED_TRANSLATION_LANGUAGES = {
     "nl": "Dutch",
     "en": "English",
@@ -56,19 +81,36 @@ TRANSLATION_UPSTREAM_PROTOCOL = RealtimeUpstreamProtocol(
 )
 
 
-def get_language_hint() -> str | None:
+def normalize_language_hint(value: str, setting_name: str) -> str | None:
+    language = value.strip().lower()
+    if language == DEFAULT_LANGUAGE_HINT:
+        return None
+    if "," in language:
+        raise ValueError(
+            f"{setting_name} must be one language code, for example 'de'. "
+            "Use 'auto' or leave it empty for automatic language detection."
+        )
+    if language not in SUPPORTED_LANGUAGE_HINTS:
+        supported = ", ".join([DEFAULT_LANGUAGE_HINT, *sorted(SUPPORTED_LANGUAGE_HINTS)])
+        raise ValueError(f"{setting_name} must be one of: {supported}.")
+
+    return language
+
+
+def get_language_hint(websocket: WebSocket | None = None) -> str | None:
+    if websocket:
+        value = (
+            websocket.query_params.get("languageHint")
+            or websocket.query_params.get("sourceLanguage")
+        )
+        if value is not None:
+            return normalize_language_hint(value, "languageHint")
+
     value = os.getenv("AZURE_OPENAI_REALTIME_LANGUAGE_HINT")
     if not value:
         return None
 
-    language = value.strip()
-    if "," in language:
-        raise ValueError(
-            "AZURE_OPENAI_REALTIME_LANGUAGE_HINT must be one language code, "
-            "for example 'de'. Leave it empty for automatic language detection."
-        )
-
-    return language
+    return normalize_language_hint(value, "AZURE_OPENAI_REALTIME_LANGUAGE_HINT")
 
 
 def get_optional_model_env(name: str, default: str) -> str:
@@ -172,10 +214,9 @@ def build_translation_realtime_url() -> str:
     )
 
 
-def build_whisper_session_update() -> dict[str, Any]:
+def build_whisper_session_update(language_hint: str | None = None) -> dict[str, Any]:
     model = get_required_env("AZURE_OPENAI_REALTIME_DEPLOYMENT")
     transcription: dict[str, Any] = {"model": model}
-    language_hint = get_language_hint()
     if language_hint:
         transcription["language"] = language_hint
     transcription_delay = get_transcription_delay()
@@ -492,8 +533,9 @@ async def whisper(websocket: WebSocket) -> None:
     await websocket.accept()
 
     try:
+        language_hint = get_language_hint(websocket)
         realtime_url = build_whisper_realtime_url()
-        session_update = build_whisper_session_update()
+        session_update = build_whisper_session_update(language_hint)
         protocol = build_whisper_upstream_protocol()
     except ValueError as error:
         logger.warning("Invalid realtime configuration: %s", error)

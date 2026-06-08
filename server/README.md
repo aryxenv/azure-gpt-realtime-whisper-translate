@@ -30,7 +30,8 @@ Keeping it simple:
 - `/realtime/whisper` proxies audio to the realtime transcription endpoint. It
   appends audio chunks continuously and, by default, commits on pause-aligned
   boundaries so standalone `gpt-realtime-whisper` does not receive one giant
-  multilingual buffer.
+  multilingual buffer. It accepts an optional per-session language hint from the
+  client websocket query string.
 - `/realtime/translation` proxies audio to the realtime translation endpoint and
   accepts the target output language from the client websocket query string. It
   uses the translation session lifecycle and drains after `session.close`.
