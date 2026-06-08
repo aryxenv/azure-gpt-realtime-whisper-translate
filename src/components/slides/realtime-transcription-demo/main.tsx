@@ -15,6 +15,7 @@ import {
   getTranscriptText,
   type RealtimeTranscriptEvent,
 } from "@/lib/realtime-transcript";
+import { getServerWebSocketUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type CaptureStatus = "idle" | "connecting" | "listening" | "stopping" | "error";
@@ -47,7 +48,8 @@ function getRealtimeWebSocketUrl(languageHint: string) {
   const configuredUrl = import.meta.env.VITE_REALTIME_WS_URL as
     | string
     | undefined;
-  const baseUrl = configuredUrl || "ws://localhost:8000/realtime/whisper";
+  const baseUrl =
+    configuredUrl || getServerWebSocketUrl("/realtime/whisper");
   if (languageHint === AUTO_LANGUAGE_HINT) {
     return baseUrl;
   }
@@ -275,7 +277,7 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
             <div>
               <p className="font-semibold">Transcript</p>
               <p className="text-xs text-muted-foreground">
-                Pure input transcript deltas
+                Input transcript deltas
               </p>
             </div>
             <Badge variant={hasTranscript ? "default" : "muted"}>

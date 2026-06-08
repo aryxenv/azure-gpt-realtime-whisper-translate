@@ -34,18 +34,29 @@ walkthrough, see
 - Azure CLI and Azure Developer CLI (`azd`) for provisioning Azure OpenAI.
 - An Azure identity that can create Azure OpenAI resources and role assignments.
 
-### 2. Provision the Foundry models
+### 2. Provision the Foundry models and hosting
 
 This repo includes azd-deployable Bicep infrastructure in `infra/`. It creates an
-Azure OpenAI resource in **France Central** and deploys:
+Azure AI Foundry resource and project in **France Central** and deploys:
 
 - `gpt-realtime-whisper` version `2026-05-06`
 - `gpt-realtime-translate` version `2026-05-06`
 
+It also deploys the demo app:
+
+- the Webslides frontend on Azure Static Web Apps;
+- the FastAPI realtime proxy on Azure Container Apps;
+- the backend Container App with `minReplicas: 1` and `maxReplicas: 1`.
+
+The backend container image is built remotely by Azure Container Registry Tasks
+during `azd deploy`/`azd up`, so the image architecture comes from Azure instead
+of your laptop CPU.
+
 Before running provisioning, confirm the subscription has available
 GlobalStandard realtime model quota in France Central. If another deployment
 already consumes the quota, keep using that existing resource or free capacity
-outside this workflow before running `azd up`.
+outside this workflow before running `azd up`. The hosted backend is always-on,
+so it has a small ongoing Container Apps cost even when no one is presenting.
 
 Sign in, create/select an azd environment, then provision:
 
@@ -56,20 +67,23 @@ azd env new realtime-speech-demo
 azd up
 ```
 
-During `azd up`, Bicep outputs are captured into the azd environment. The
-post-provision hook then updates `server/.env` with the created resource name and
-deployment names:
+During `azd up`, Bicep outputs are captured into the azd environment. The hosted
+backend receives the same resource and deployment names as Container Apps
+environment variables, and the post-provision hook still updates local
+`server/.env` so the dev server works after provisioning:
 
 ```env
 AZURE_OPENAI_RESOURCE_NAME=<created-resource-name>
+AZURE_OPENAI_ENDPOINT=<created-openai-compatible-endpoint>
 AZURE_OPENAI_REALTIME_DEPLOYMENT=gpt-realtime-whisper
 AZURE_OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate
 AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL=gpt-realtime-whisper
 ```
 
 Authentication is keyless. The infrastructure assigns the current azd principal
-the `Cognitive Services OpenAI User` role on the Azure OpenAI resource so the
-server can use `DefaultAzureCredential`.
+and the hosted backend identity the `Cognitive Services OpenAI User` role on the
+Azure OpenAI resource so both local and hosted server flows can use
+`DefaultAzureCredential`.
 
 ### 3. Run the local demo
 
@@ -109,9 +123,10 @@ uv run fastapi dev
 
 Open http://localhost:5173.
 
-The realtime demo requires Azure OpenAI / Microsoft Foundry configuration for
-the local server. Start from `server/.env.example`, and see `server/README.md`
-for the server-specific setup notes.
+The realtime demo requires Azure OpenAI / Microsoft Foundry configuration for the
+local server. Running `azd up` writes `server/.env` automatically. For manual
+setup, start from `server/.env.example` and see `server/README.md` for the
+server-specific setup notes.
 
 ## Demo slides
 
@@ -134,8 +149,9 @@ proxy path before being sent to the configured Azure Realtime endpoint.
 Generated files in `exports/` are ignored by git so private presentation
 artifacts are not pushed accidentally.
 
-GitHub Pages can host the static slide deck, but the live FastAPI-backed demo
-only runs locally unless you point the frontend at a hosted server.
+Azure Static Web Apps can host the interactive deck with the live FastAPI-backed
+demo through the hosted Container Apps backend. GitHub Pages remains a static
+deck-only option.
 
 ## Customize the deck
 

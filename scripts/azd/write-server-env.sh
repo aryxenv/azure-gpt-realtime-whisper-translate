@@ -35,6 +35,7 @@ if [ ! -f "$server_env_path" ]; then
 fi
 
 set_dotenv_value "$server_env_path" "AZURE_OPENAI_RESOURCE_NAME" "$(required_env AZURE_OPENAI_RESOURCE_NAME)"
+set_dotenv_value "$server_env_path" "AZURE_OPENAI_ENDPOINT" "$(required_env AZURE_OPENAI_ENDPOINT)"
 set_dotenv_value "$server_env_path" "AZURE_OPENAI_REALTIME_DEPLOYMENT" "$(required_env AZURE_OPENAI_REALTIME_DEPLOYMENT)"
 set_dotenv_value "$server_env_path" "AZURE_OPENAI_REALTIME_TRANSLATION_MODEL" "$(required_env AZURE_OPENAI_REALTIME_TRANSLATION_MODEL)"
 set_dotenv_value "$server_env_path" "AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL" "$(required_env AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL)"

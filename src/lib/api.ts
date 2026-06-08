@@ -4,6 +4,12 @@ const serverUrl = import.meta.env.VITE_SERVER_URL ?? "http://localhost:8000";
 
 export const SERVER_URL = serverUrl.replace(/\/$/, "");
 
+export function getServerWebSocketUrl(path: string) {
+  const url = new URL(path, `${SERVER_URL}/`);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
+
 export interface HealthStatus {
   status: string;
 }

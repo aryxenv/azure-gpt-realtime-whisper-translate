@@ -23,6 +23,7 @@ import {
   getTranscriptText,
   type RealtimeTranscriptEvent,
 } from "@/lib/realtime-transcript";
+import { getServerWebSocketUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type CaptureStatus = "idle" | "connecting" | "listening" | "stopping" | "error";
@@ -66,7 +67,7 @@ function getTranslationWebSocketBaseUrl() {
     return configuredUrl;
   }
 
-  return "ws://localhost:8000/realtime/translation";
+  return getServerWebSocketUrl("/realtime/translation");
 }
 
 function getTranslationWebSocketUrl(targetLanguage: string) {

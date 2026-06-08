@@ -108,8 +108,10 @@ def get_float_env(name: str, default: float) -> float:
 
 
 def get_azure_openai_host() -> str:
-    resource_name = get_required_env("AZURE_OPENAI_RESOURCE_NAME")
-    endpoint = f"https://{resource_name}.openai.azure.com"
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    if not endpoint:
+        resource_name = get_required_env("AZURE_OPENAI_RESOURCE_NAME")
+        endpoint = f"https://{resource_name}.openai.azure.com"
     parsed = urlparse(endpoint if "://" in endpoint else f"https://{endpoint}")
     host = parsed.netloc or parsed.path
     if not host:

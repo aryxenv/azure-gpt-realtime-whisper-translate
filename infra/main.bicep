@@ -27,11 +27,17 @@ param deploymentSkuName string = 'GlobalStandard'
 
 @minValue(1)
 @description('Deployment capacity for each realtime model deployment.')
-param deploymentCapacity int = 1
+param deploymentCapacity int = 5
+
+@description('Azure region for Static Web Apps. Keep this separate because Static Web Apps has a smaller region list than Azure OpenAI.')
+param staticWebAppLocation string = 'westeurope'
+
+@description('Name of the Azure AI Foundry project.')
+param foundryProjectName string = 'ai-project-${environmentName}'
 
 var cleanedEnvironmentName = take(replace(replace(replace(toLower(environmentName), '-', ''), '_', ''), ' ', ''), 18)
 var resourceSuffix = take(uniqueString(subscription().id, environmentName, location), 8)
-var openAiAccountName = 'oai${cleanedEnvironmentName}${resourceSuffix}'
+var foundryAccountName = 'ai${cleanedEnvironmentName}${resourceSuffix}'
 var tags = {
   'azd-env-name': environmentName
   workload: 'gpt-realtime-whisper-translate'
@@ -47,7 +53,8 @@ module foundry './modules/foundry-openai.bicep' = {
   name: 'foundry-openai'
   scope: resourceGroup
   params: {
-    name: openAiAccountName
+    name: foundryAccountName
+    projectName: foundryProjectName
     location: location
     tags: tags
     principalId: principalId
@@ -60,9 +67,34 @@ module foundry './modules/foundry-openai.bicep' = {
   }
 }
 
+module hosting './modules/hosting.bicep' = {
+  name: 'hosting'
+  scope: resourceGroup
+  params: {
+    environmentName: environmentName
+    resourceSuffix: resourceSuffix
+    containerAppLocation: location
+    staticWebAppLocation: staticWebAppLocation
+    tags: tags
+    principalId: principalId
+    openAiResourceName: foundry.outputs.openAiResourceName
+    openAiEndpoint: foundry.outputs.openAiEndpoint
+    whisperDeploymentName: whisperDeploymentName
+    translateDeploymentName: translateDeploymentName
+  }
+}
+
 output AZURE_RESOURCE_GROUP string = resourceGroup.name
 output AZURE_OPENAI_RESOURCE_NAME string = foundry.outputs.openAiResourceName
 output AZURE_OPENAI_ENDPOINT string = foundry.outputs.openAiEndpoint
+output AZURE_AI_ACCOUNT_NAME string = foundry.outputs.foundryAccountName
+output AZURE_AI_PROJECT_NAME string = foundry.outputs.foundryProjectName
+output AZURE_AI_PROJECT_ENDPOINT string = foundry.outputs.foundryProjectEndpoint
+output FOUNDRY_PROJECT_ENDPOINT string = foundry.outputs.foundryProjectEndpoint
 output AZURE_OPENAI_REALTIME_DEPLOYMENT string = whisperDeploymentName
 output AZURE_OPENAI_REALTIME_TRANSLATION_MODEL string = translateDeploymentName
 output AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL string = whisperDeploymentName
+output VITE_SERVER_URL string = hosting.outputs.apiUrl
+output AZURE_CONTAINER_REGISTRY_ENDPOINT string = hosting.outputs.containerRegistryEndpoint
+output AZURE_STATIC_WEB_APP_NAME string = hosting.outputs.staticWebAppName
+output AZURE_CONTAINER_APP_NAME string = hosting.outputs.containerAppName

@@ -1,15 +1,18 @@
 targetScope = 'resourceGroup'
 
-@description('Name of the Azure OpenAI account.')
+@description('Name of the Azure AI Foundry resource.')
 param name string
 
-@description('Azure region for the Azure OpenAI account and deployments.')
+@description('Name of the Azure AI Foundry project.')
+param projectName string
+
+@description('Azure region for the Azure AI Foundry resource, project, and deployments.')
 param location string = resourceGroup().location
 
 @description('Tags applied to Azure resources.')
 param tags object = {}
 
-@description('Optional principal ID that should receive Cognitive Services OpenAI User access.')
+@description('Optional principal ID that should receive Foundry project and model access.')
 param principalId string = ''
 
 @description('Deployment name for gpt-realtime-whisper.')
@@ -35,11 +38,15 @@ var cognitiveServicesOpenAiUserRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
 )
+var azureAiUserRoleDefinitionId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '53ca6127-db72-4b80-b1b0-d745d6d5456d'
+)
 
-resource openAi 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
+resource foundryAccount 'Microsoft.CognitiveServices/accounts@2025-06-01' = {
   name: name
   location: location
-  kind: 'OpenAI'
+  kind: 'AIServices'
   sku: {
     name: 'S0'
   }
@@ -48,14 +55,20 @@ resource openAi 'Microsoft.CognitiveServices/accounts@2024-10-01' = {
   }
   tags: tags
   properties: {
+    allowProjectManagement: true
     customSubDomainName: name
     disableLocalAuth: true
     publicNetworkAccess: 'Enabled'
+    networkAcls: {
+      defaultAction: 'Allow'
+      virtualNetworkRules: []
+      ipRules: []
+    }
   }
 }
 
-resource whisperDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
-  parent: openAi
+resource whisperDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
+  parent: foundryAccount
   name: whisperDeploymentName
   sku: {
     name: deploymentSkuName
@@ -68,13 +81,15 @@ resource whisperDeployment 'Microsoft.CognitiveServices/accounts/deployments@202
       name: 'gpt-realtime-whisper'
       version: whisperModelVersion
     }
-    versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
   }
 }
 
-resource translateDeployment 'Microsoft.CognitiveServices/accounts/deployments@2024-10-01' = {
-  parent: openAi
+resource translateDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
+  parent: foundryAccount
   name: translateDeploymentName
+  dependsOn: [
+    whisperDeployment
+  ]
   sku: {
     name: deploymentSkuName
     capacity: deploymentCapacity
@@ -86,20 +101,47 @@ resource translateDeployment 'Microsoft.CognitiveServices/accounts/deployments@2
       name: 'gpt-realtime-translate'
       version: translateModelVersion
     }
-    versionUpgradeOption: 'OnceNewDefaultVersionAvailable'
   }
 }
 
+resource project 'Microsoft.CognitiveServices/accounts/projects@2025-06-01' = {
+  parent: foundryAccount
+  name: projectName
+  location: location
+  identity: {
+    type: 'SystemAssigned'
+  }
+  properties: {
+    description: 'Realtime speech demo project'
+    displayName: projectName
+  }
+  dependsOn: [
+    translateDeployment
+  ]
+}
+
 resource localDeveloperAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
-  name: guid(openAi.id, principalId, cognitiveServicesOpenAiUserRoleDefinitionId)
-  scope: openAi
+  name: guid(foundryAccount.id, principalId, cognitiveServicesOpenAiUserRoleDefinitionId)
+  scope: foundryAccount
   properties: {
     roleDefinitionId: cognitiveServicesOpenAiUserRoleDefinitionId
     principalId: principalId
   }
 }
 
-output openAiResourceName string = openAi.name
-output openAiEndpoint string = openAi.properties.endpoint
+resource localDeveloperProjectAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(principalId)) {
+  name: guid(project.id, principalId, azureAiUserRoleDefinitionId)
+  scope: project
+  properties: {
+    roleDefinitionId: azureAiUserRoleDefinitionId
+    principalId: principalId
+  }
+}
+
+output openAiResourceName string = foundryAccount.name
+output openAiEndpoint string = foundryAccount.properties.endpoints['OpenAI Language Model Instance API']
+output foundryAccountName string = foundryAccount.name
+output foundryProjectName string = project.name
+output foundryProjectEndpoint string = project.properties.endpoints['AI Foundry API']
 output whisperDeploymentName string = whisperDeployment.name
 output translateDeploymentName string = translateDeployment.name

@@ -1,4 +1,19 @@
 name: gpt-realtime-whisper-translate
+services:
+  web:
+    project: .
+    dist: dist
+    language: ts
+    host: staticwebapp
+    uses:
+      - api
+  api:
+    project: ./server
+    language: docker
+    host: containerapp
+    docker:
+      path: Dockerfile
+      remoteBuild: true
 infra:
   provider: bicep
 hooks:
