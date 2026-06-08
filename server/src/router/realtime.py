@@ -47,6 +47,7 @@ WHISPER_UPSTREAM_PROTOCOL = RealtimeUpstreamProtocol(
 TRANSLATION_UPSTREAM_PROTOCOL = RealtimeUpstreamProtocol(
     audio_append_event_type="session.input_audio_buffer.append",
     session_close_event_type="session.close",
+    close_session_before_drain=True,
 )
 
 
@@ -315,6 +316,11 @@ async def run_realtime_proxy(
                 azure_realtime,
                 normalize_event,
                 protocol=protocol,
+            )
+            await close_if_connected(
+                websocket,
+                status.WS_1000_NORMAL_CLOSURE,
+                "Realtime session ended.",
             )
     except WebSocketDisconnect:
         return

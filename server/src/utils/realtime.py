@@ -52,6 +52,7 @@ class RealtimeUpstreamProtocol:
     audio_commit_event_type: str | None = None
     session_close_event_type: str | None = None
     auto_commit_audio: bool = False
+    close_session_before_drain: bool = False
 
 
 def get_required_env(name: str) -> str:
@@ -259,8 +260,11 @@ async def handle_client_control(
     if event_type == "stop":
         if protocol.auto_commit_audio:
             await commit_audio_buffer(azure_realtime, state, protocol)
+        if protocol.close_session_before_drain:
+            await close_upstream_session(azure_realtime, state, protocol)
         await asyncio.sleep(state.stop_drain_seconds)
-        await close_upstream_session(azure_realtime, state, protocol)
+        if not protocol.close_session_before_drain:
+            await close_upstream_session(azure_realtime, state, protocol)
         stop_event.set()
         return
 

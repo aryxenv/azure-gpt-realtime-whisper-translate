@@ -156,9 +156,7 @@ export function cleanupRealtimeAudioCapture(
     handles.socket.send(JSON.stringify({ type: "stop" }));
   }
 
-  if (gracefulStop) {
-    window.setTimeout(() => handles.socket.close(), 1300);
-  } else {
+  if (!gracefulStop) {
     handles.socket.close();
   }
 
