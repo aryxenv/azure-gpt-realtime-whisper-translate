@@ -16,16 +16,21 @@ import {
   startRealtimeAudioCapture,
   type RealtimeAudioCaptureHandles,
 } from "@/lib/realtime-audio";
+import {
+  appendTextDelta,
+  applyTranscriptEvent,
+  createTranscriptStreamState,
+  getTranscriptText,
+  type RealtimeTranscriptEvent,
+} from "@/lib/realtime-transcript";
 import { cn } from "@/lib/utils";
 
 type CaptureStatus = "idle" | "connecting" | "listening" | "stopping" | "error";
 
-interface TranslationServerEvent {
+interface TranslationServerEvent extends RealtimeTranscriptEvent {
   type: string;
-  delta?: string;
   message?: string;
   status?: string;
-  transcript?: string;
   translation?: string;
 }
 
@@ -78,14 +83,6 @@ function getTranslationWebSocketUrl(targetLanguage: string) {
   }
 }
 
-function appendDelta(text: string, delta: string | undefined) {
-  if (!delta) {
-    return text;
-  }
-
-  return text + delta;
-}
-
 function StreamPane({
   emptyText,
   label,
@@ -131,7 +128,9 @@ export function RealtimeTranslationDemo({ isActive }: SlideProps) {
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [targetLanguage, setTargetLanguage] = useState("nl");
-  const [transcript, setTranscript] = useState("");
+  const [transcriptState, setTranscriptState] = useState(
+    createTranscriptStreamState,
+  );
   const [translation, setTranslation] = useState("");
   const captureRef = useRef<RealtimeAudioCaptureHandles | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
@@ -141,6 +140,10 @@ export function RealtimeTranslationDemo({ isActive }: SlideProps) {
   const websocketUrl = useMemo(
     () => getTranslationWebSocketUrl(targetLanguage),
     [targetLanguage],
+  );
+  const transcript = useMemo(
+    () => getTranscriptText(transcriptState),
+    [transcriptState],
   );
   const targetLanguageLabel =
     LANGUAGE_OPTIONS.find((option) => option.code === targetLanguage)?.label ??
@@ -172,17 +175,17 @@ export function RealtimeTranslationDemo({ isActive }: SlideProps) {
     }
 
     if (event.type === "transcript.delta") {
-      setTranscript((current) => appendDelta(current, event.delta));
+      setTranscriptState((current) => applyTranscriptEvent(current, event));
       return;
     }
 
     if (event.type === "translation.delta") {
-      setTranslation((current) => appendDelta(current, event.delta));
+      setTranslation((current) => appendTextDelta(current, event.delta));
       return;
     }
 
-    if (event.type === "transcript.completed" && event.transcript) {
-      setTranscript(event.transcript);
+    if (event.type === "transcript.completed") {
+      setTranscriptState((current) => applyTranscriptEvent(current, event));
       return;
     }
 
@@ -204,7 +207,7 @@ export function RealtimeTranslationDemo({ isActive }: SlideProps) {
 
   const startListening = useCallback(async () => {
     setError(null);
-    setTranscript("");
+    setTranscriptState(createTranscriptStreamState());
     setTranslation("");
     setStatus("connecting");
 

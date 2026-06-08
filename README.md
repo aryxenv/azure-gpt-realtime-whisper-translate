@@ -33,7 +33,7 @@ Available at http://localhost:8000 (no config needed - automatically available o
 The realtime demo slides use local WebSocket routes:
 
 - `/realtime/whisper` streams browser microphone audio to the Whisper
-  transcription session through a thin local proxy.
+  transcription session through a local proxy.
 - `/realtime/translation` streams browser microphone audio to the translation
   session. The slide sends the selected target language when it opens the
   websocket.

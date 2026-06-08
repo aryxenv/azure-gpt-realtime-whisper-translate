@@ -5,13 +5,14 @@
 The default `/realtime/whisper` route stays on standalone `gpt-realtime-whisper`.
 It is intentionally thin: the browser streams PCM audio to FastAPI, FastAPI
 forwards the chunks to the realtime transcription endpoint, and the endpoint
-produces transcript deltas. The server normalizes both item-scoped Whisper
-events and session-scoped transcript events into the same pure `transcript.delta`
-stream used by the translation slide.
+produces transcript deltas. The server normalizes both item-scoped Whisper events
+and session-scoped transcript events into the same transcript stream used by the
+translation slide.
 
-The route no longer uses local RMS filtering or timer-based commits by default.
-If the endpoint needs explicit finalization, the server sends a final commit when
-the microphone stops.
+Unlike the translation endpoint, standalone `gpt-realtime-whisper` usually needs
+explicit commits. The default route appends audio continuously, keeps pause
+context, and commits on pause-aligned boundaries so the model does not receive
+one giant multilingual buffer at stop time.
 
 ## Optional transcription delay
 
@@ -26,10 +27,16 @@ AZURE_OPENAI_REALTIME_TRANSCRIPTION_DELAY=high
 
 Leave it unset if Azure rejects the field.
 
-## Fallback commit modes
+## Turn detection and commit modes
 
-The default commit strategy is `none`: append all audio and only finalize on
-stop. Manual segmentation is still available as a fallback:
+The translation endpoint owns segmentation. Standalone Whisper may not. You can
+try endpoint-owned turn detection if the Azure deployment supports it:
+
+```env
+AZURE_OPENAI_REALTIME_TURN_DETECTION=server_vad
+```
+
+Leave it unset for the default manual commit mode:
 
 ```env
 AZURE_OPENAI_REALTIME_COMMIT_STRATEGY=silence
@@ -41,8 +48,8 @@ AZURE_OPENAI_REALTIME_MIN_AUDIO_RMS=0.01
 AZURE_OPENAI_REALTIME_STOP_DRAIN_MS=2200
 ```
 
-Use `silence` or `fixed` only when the endpoint-first path does not provide the
-latency/quality behavior needed for a specific demo.
+Use `fixed` only when lower latency matters more than phrase quality. Use `none`
+only as an append-only experiment.
 
 ## Language hints
 

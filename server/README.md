@@ -27,8 +27,10 @@ Keeping it simple:
 
 ## Realtime routes
 
-- `/realtime/whisper` proxies audio to the realtime transcription endpoint. By
-  default it stays thin: append audio chunks and let the endpoint produce
-  transcript events, with a final commit only when the microphone stops.
+- `/realtime/whisper` proxies audio to the realtime transcription endpoint. It
+  appends audio chunks continuously and, by default, commits on pause-aligned
+  boundaries so standalone `gpt-realtime-whisper` does not receive one giant
+  multilingual buffer.
 - `/realtime/translation` proxies audio to the realtime translation endpoint and
-  accepts the target output language from the client websocket query string.
+  accepts the target output language from the client websocket query string. It
+  uses the translation session lifecycle and drains after `session.close`.

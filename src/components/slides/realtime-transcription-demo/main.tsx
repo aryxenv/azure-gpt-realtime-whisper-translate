@@ -9,15 +9,18 @@ import {
   startRealtimeAudioCapture,
   type RealtimeAudioCaptureHandles,
 } from "@/lib/realtime-audio";
+import {
+  applyTranscriptEvent,
+  createTranscriptStreamState,
+  getTranscriptText,
+  type RealtimeTranscriptEvent,
+} from "@/lib/realtime-transcript";
 import { cn } from "@/lib/utils";
 
 type CaptureStatus = "idle" | "connecting" | "listening" | "stopping" | "error";
 
-interface TranscriptServerEvent {
+interface TranscriptServerEvent extends RealtimeTranscriptEvent {
   type: string;
-  itemId?: string;
-  delta?: string;
-  transcript?: string;
   message?: string;
   status?: string;
 }
@@ -33,23 +36,21 @@ function getRealtimeWebSocketUrl() {
   return "ws://localhost:8000/realtime/whisper";
 }
 
-function appendDelta(text: string, delta: string | undefined) {
-  if (!delta) {
-    return text;
-  }
-
-  return text + delta;
-}
-
 export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [transcript, setTranscript] = useState("");
+  const [transcriptState, setTranscriptState] = useState(
+    createTranscriptStreamState,
+  );
   const captureRef = useRef<RealtimeAudioCaptureHandles | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const isListening = status === "listening";
   const isBusy = status === "connecting" || status === "stopping";
   const websocketUrl = useMemo(() => getRealtimeWebSocketUrl(), []);
+  const transcript = useMemo(
+    () => getTranscriptText(transcriptState),
+    [transcriptState],
+  );
   const hasTranscript = transcript.trim().length > 0;
 
   const stopListening = useCallback(() => {
@@ -77,23 +78,11 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
       return;
     }
 
-    if (event.type === "transcript.delta") {
-      setTranscript((current) => appendDelta(current, event.delta));
-      return;
-    }
-
-    if (event.type === "audio.committed") {
-      return;
-    }
-
     if (
-      event.type === "transcript.completed" &&
-      typeof event.transcript === "string"
+      event.type === "transcript.delta" ||
+      event.type === "transcript.completed"
     ) {
-      const completedTranscript = event.transcript;
-      setTranscript((current) =>
-        event.itemId ? current || completedTranscript : completedTranscript,
-      );
+      setTranscriptState((current) => applyTranscriptEvent(current, event));
       return;
     }
 
@@ -110,7 +99,7 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
 
   const startListening = useCallback(async () => {
     setError(null);
-    setTranscript("");
+    setTranscriptState(createTranscriptStreamState());
     setStatus("connecting");
 
     try {

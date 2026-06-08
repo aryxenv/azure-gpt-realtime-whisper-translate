@@ -44,12 +44,14 @@ class RealtimeProxyState:
     min_commit_audio_bytes: int
     stop_drain_seconds: float
     uncommitted_audio_bytes: int = 0
+    uncommitted_has_speech: bool = False
     silent_audio_seconds: float = 0
     next_sequence: int = 1
     pending_sequences: deque[int] = field(default_factory=deque)
     pending_item_ids: set[str] = field(default_factory=set)
     item_sequences: dict[str, int] = field(default_factory=dict)
     finalization_event: asyncio.Event = field(default_factory=asyncio.Event)
+    session_closed_event: asyncio.Event = field(default_factory=asyncio.Event)
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
@@ -63,6 +65,7 @@ class RealtimeUpstreamProtocol:
     close_session_before_drain: bool = False
     force_commit_on_stop: bool = False
     wait_for_pending_finalizations_on_stop: bool = False
+    wait_for_session_closed_on_stop: bool = False
 
 
 def get_required_env(name: str) -> str:
@@ -205,9 +208,13 @@ async def append_audio_chunk(
     is_low_energy = rms < state.min_audio_rms
     if is_low_energy:
         state.silent_audio_seconds += get_audio_duration_seconds(audio_bytes)
+        if supports_audio_commit(protocol) and not state.uncommitted_has_speech:
+            logger.debug("Skipping leading low-energy audio chunk: rms=%.5f", rms)
+            return False
         if protocol.filter_low_energy_audio:
             if (
                 protocol.commit_strategy == "silence"
+                and state.uncommitted_has_speech
                 and state.uncommitted_audio_bytes >= state.min_commit_audio_bytes
                 and state.silent_audio_seconds >= state.silence_commit_seconds
             ):
@@ -226,6 +233,7 @@ async def append_audio_chunk(
         if supports_audio_commit(protocol):
             state.uncommitted_audio_bytes += len(audio_bytes)
             if not is_low_energy:
+                state.uncommitted_has_speech = True
                 state.silent_audio_seconds = 0
         logger.debug(
             "Appended audio chunk: bytes=%s rms=%.5f pending_bytes=%s",
@@ -236,6 +244,14 @@ async def append_audio_chunk(
 
     if (
         protocol.commit_strategy == "silence"
+        and state.uncommitted_has_speech
+        and state.silent_audio_seconds >= state.silence_commit_seconds
+        and state.uncommitted_audio_bytes >= state.min_commit_audio_bytes
+    ):
+        await commit_audio_buffer(azure_realtime, state, protocol)
+    elif (
+        protocol.commit_strategy == "silence"
+        and state.uncommitted_has_speech
         and state.uncommitted_audio_bytes >= state.max_commit_audio_bytes
     ):
         await commit_audio_buffer(azure_realtime, state, protocol)
@@ -256,6 +272,7 @@ async def commit_audio_buffer(
     async with state.send_lock:
         if (
             state.uncommitted_audio_bytes <= 0
+            or not state.uncommitted_has_speech
             or (
                 not force
                 and state.uncommitted_audio_bytes < state.min_commit_audio_bytes
@@ -277,6 +294,7 @@ async def commit_audio_buffer(
         state.finalization_event.set()
         state.next_sequence += 1
         state.uncommitted_audio_bytes = 0
+        state.uncommitted_has_speech = False
         state.silent_audio_seconds = 0
         return True
 
@@ -298,6 +316,10 @@ def mark_item_finalized(
 
     state.pending_item_ids.discard(item_id)
     state.finalization_event.set()
+
+
+def mark_session_closed(state: RealtimeProxyState) -> None:
+    state.session_closed_event.set()
 
 
 def discard_pending_sequence(state: RealtimeProxyState) -> None:
@@ -345,6 +367,16 @@ async def wait_for_pending_finalizations(
             return
 
 
+async def wait_for_session_closed(
+    state: RealtimeProxyState,
+    timeout_seconds: float,
+) -> None:
+    try:
+        await asyncio.wait_for(state.session_closed_event.wait(), timeout=timeout_seconds)
+    except TimeoutError:
+        logger.info("Timed out waiting for realtime session.closed.")
+
+
 async def close_upstream_session(
     azure_realtime: Any,
     state: RealtimeProxyState,
@@ -389,7 +421,9 @@ async def handle_client_control(
             )
         if protocol.close_session_before_drain:
             await close_upstream_session(azure_realtime, state, protocol)
-        if protocol.wait_for_pending_finalizations_on_stop:
+        if protocol.wait_for_session_closed_on_stop:
+            await wait_for_session_closed(state, state.stop_drain_seconds)
+        elif protocol.wait_for_pending_finalizations_on_stop:
             await wait_for_pending_finalizations(state, state.stop_drain_seconds)
         else:
             await asyncio.sleep(state.stop_drain_seconds)
