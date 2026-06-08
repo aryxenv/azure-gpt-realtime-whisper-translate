@@ -39,7 +39,7 @@ DEFAULT_WHISPER_COMMIT_STRATEGY = "silence"
 DEFAULT_WHISPER_TURN_DETECTION = "none"
 SUPPORTED_TRANSCRIPTION_DELAYS = {"minimal", "low", "medium", "high", "xhigh"}
 SUPPORTED_WHISPER_TURN_DETECTION = {"none", "server_vad", "semantic_vad"}
-SUPPORTED_WHISPER_COMMIT_STRATEGIES = {"fixed", "none", "silence"}
+SUPPORTED_WHISPER_COMMIT_STRATEGIES = {"none", "silence"}
 SUPPORTED_LANGUAGE_HINTS = {
     "bg",
     "cs",

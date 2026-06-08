@@ -27,20 +27,22 @@ AZURE_OPENAI_REALTIME_TRANSCRIPTION_DELAY=high
 
 Leave it unset if Azure rejects the field.
 
-## Turn detection and commit modes
+## Commit modes
 
-The translation endpoint owns segmentation. Standalone Whisper may not. You can
-try endpoint-owned turn detection if the Azure deployment supports it:
+The translation endpoint owns segmentation. Standalone Whisper uses backend
+commit boundaries today. If Azure adds endpoint-owned turn detection for this
+session shape later, the backend already has a guarded env path for
+`server_vad`/`semantic_vad`. Leave it unset for today's smooth demo path:
 
 ```env
-AZURE_OPENAI_REALTIME_TURN_DETECTION=server_vad
+AZURE_OPENAI_REALTIME_TURN_DETECTION=none
 ```
 
-Leave it unset for the default manual commit mode:
+The default commit mode is `silence`, which keeps pause context and commits on
+pause-aligned boundaries:
 
 ```env
 AZURE_OPENAI_REALTIME_COMMIT_STRATEGY=silence
-AZURE_OPENAI_REALTIME_COMMIT_INTERVAL_MS=2000
 AZURE_OPENAI_REALTIME_SILENCE_COMMIT_MS=900
 AZURE_OPENAI_REALTIME_MAX_COMMIT_AUDIO_MS=12000
 AZURE_OPENAI_REALTIME_MIN_COMMIT_AUDIO_MS=500
@@ -48,8 +50,8 @@ AZURE_OPENAI_REALTIME_MIN_AUDIO_RMS=0.01
 AZURE_OPENAI_REALTIME_STOP_DRAIN_MS=2200
 ```
 
-Use `fixed` only when lower latency matters more than phrase quality. Use `none`
-only as an append-only experiment.
+`none` remains available as an advanced stop-time commit experiment, but the
+smooth demo path should stay on `silence`.
 
 ## Language hints
 

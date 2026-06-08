@@ -18,7 +18,6 @@ from starlette.websockets import WebSocketState
 logger = logging.getLogger(__name__)
 
 DEFAULT_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default"
-DEFAULT_COMMIT_INTERVAL_MS = 2000
 DEFAULT_SILENCE_COMMIT_MS = 900
 DEFAULT_MAX_COMMIT_AUDIO_MS = 12000
 DEFAULT_MIN_COMMIT_AUDIO_MS = 500
@@ -36,7 +35,6 @@ RealtimeEventNormalizer = Callable[
 
 @dataclass
 class RealtimeProxyState:
-    commit_interval_seconds: float
     silence_commit_seconds: float
     max_commit_audio_bytes: int
     min_audio_rms: float
@@ -129,11 +127,6 @@ def build_proxy_state() -> RealtimeProxyState:
     )
 
     return RealtimeProxyState(
-        commit_interval_seconds=get_int_env(
-            "AZURE_OPENAI_REALTIME_COMMIT_INTERVAL_MS",
-            DEFAULT_COMMIT_INTERVAL_MS,
-        )
-        / 1000,
         silence_commit_seconds=get_int_env(
             "AZURE_OPENAI_REALTIME_SILENCE_COMMIT_MS",
             DEFAULT_SILENCE_COMMIT_MS,
@@ -496,17 +489,6 @@ async def forward_client_events(
             )
 
 
-async def auto_commit_audio(
-    azure_realtime: Any,
-    state: RealtimeProxyState,
-    stop_event: asyncio.Event,
-    protocol: RealtimeUpstreamProtocol,
-) -> None:
-    while not stop_event.is_set():
-        await asyncio.sleep(state.commit_interval_seconds)
-        await commit_audio_buffer(azure_realtime, state, protocol)
-
-
 def normalize_error_event(event: dict[str, Any]) -> dict[str, Any]:
     error = event.get("error")
     message = None
@@ -591,13 +573,6 @@ async def proxy_realtime_events(
         forward_azure_events(client, azure_realtime, state, normalize_event)
     )
     tasks = {client_to_azure, azure_to_client}
-
-    if protocol.commit_strategy == "fixed":
-        tasks.add(
-            asyncio.create_task(
-                auto_commit_audio(azure_realtime, state, stop_event, protocol)
-            )
-        )
 
     done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     for task in pending:
