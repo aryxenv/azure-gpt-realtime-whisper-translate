@@ -139,7 +139,6 @@ resource localDeveloperProjectAccess 'Microsoft.Authorization/roleAssignments@20
 }
 
 output openAiResourceName string = foundryAccount.name
-output openAiEndpoint string = foundryAccount.properties.endpoints['OpenAI Language Model Instance API']
 output foundryAccountName string = foundryAccount.name
 output foundryProjectName string = project.name
 output foundryProjectEndpoint string = project.properties.endpoints['AI Foundry API']

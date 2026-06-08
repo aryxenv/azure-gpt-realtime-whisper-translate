@@ -21,9 +21,6 @@ param principalId string = ''
 @description('Name of the Azure OpenAI resource used by the hosted backend.')
 param openAiResourceName string
 
-@description('OpenAI-compatible endpoint for the Azure AI Foundry resource used by the hosted backend.')
-param openAiEndpoint string
-
 @description('Deployment name for gpt-realtime-whisper.')
 param whisperDeploymentName string
 
@@ -70,6 +67,12 @@ resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   }
 }
 
+resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-${cleanedEnvironmentName}-${resourceSuffix}-api'
+  location: containerAppLocation
+  tags: apiServiceTags
+}
+
 resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: 'log-${cleanedEnvironmentName}-${resourceSuffix}'
   location: containerAppLocation
@@ -101,9 +104,15 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'ca-${cleanedEnvironmentName}-${resourceSuffix}'
   location: containerAppLocation
   identity: {
-    type: 'SystemAssigned'
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${apiIdentity.id}': {}
+    }
   }
   tags: apiServiceTags
+  dependsOn: [
+    apiRegistryPullAccess
+  ]
   properties: {
     managedEnvironmentId: containerEnvironment.id
     configuration: {
@@ -111,7 +120,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: registry.properties.loginServer
-          identity: 'system'
+          identity: apiIdentity.id
         }
       ]
       ingress: {
@@ -132,10 +141,6 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
               value: openAiResourceName
             }
             {
-              name: 'AZURE_OPENAI_ENDPOINT'
-              value: openAiEndpoint
-            }
-            {
               name: 'AZURE_OPENAI_REALTIME_DEPLOYMENT'
               value: whisperDeploymentName
             }
@@ -146,6 +151,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             {
               name: 'AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL'
               value: whisperDeploymentName
+            }
+            {
+              name: 'AZURE_CLIENT_ID'
+              value: apiIdentity.properties.clientId
             }
           ]
           resources: {
@@ -163,21 +172,21 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
 }
 
 resource apiOpenAiAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(openAi.id, api.name, cognitiveServicesOpenAiUserRoleDefinitionId)
+  name: guid(openAi.id, apiIdentity.name, cognitiveServicesOpenAiUserRoleDefinitionId)
   scope: openAi
   properties: {
     roleDefinitionId: cognitiveServicesOpenAiUserRoleDefinitionId
-    principalId: api.identity.principalId
+    principalId: apiIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }
 
 resource apiRegistryPullAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(registry.id, api.name, acrPullRoleDefinitionId)
+  name: guid(registry.id, apiIdentity.name, acrPullRoleDefinitionId)
   scope: registry
   properties: {
     roleDefinitionId: acrPullRoleDefinitionId
-    principalId: api.identity.principalId
+    principalId: apiIdentity.properties.principalId
     principalType: 'ServicePrincipal'
   }
 }

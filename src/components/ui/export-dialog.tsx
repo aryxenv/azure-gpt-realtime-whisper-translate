@@ -6,8 +6,11 @@ import { describeServerError, exportPdf, exportPptx } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type ExportKind = "pdf" | "pptx" | "pages";
-type ExportBadge = "Static" | "Private" | "Interactive" | "Public";
+type ExportKind = "pdf" | "pptx" | "pages" | "azure";
+type ExportBadge = "Static" | "Private" | "Interactive" | "Public" | "Server";
+
+const azureDeployCommand = "azd up";
+const azureUrlCommand = "npm run azure:url";
 
 const exportOptions: Array<{
   id: ExportKind;
@@ -32,6 +35,12 @@ const exportOptions: Array<{
     title: "GitHub Pages",
     badges: ["Interactive", "Public"],
     info: "Publish the interactive deck with the existing GitHub Actions workflow.",
+  },
+  {
+    id: "azure",
+    title: "Azure",
+    badges: ["Interactive", "Public", "Server"],
+    info: "Deploy the interactive deck and server-backed demos to Azure with azd.",
   },
 ];
 
@@ -74,9 +83,7 @@ function InfoIcon({ className, info }: { className?: string; info: string }) {
 
 function VisibilityBadge({ label }: { label: ExportBadge }) {
   return (
-    <span
-      className="inline-flex items-center rounded-sm border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold tracking-wide text-muted-foreground"
-    >
+    <span className="inline-flex items-center rounded-sm border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold tracking-wide text-muted-foreground">
       {label}
     </span>
   );
@@ -221,9 +228,9 @@ function PagesDialogContent() {
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-card p-4 text-sm leading-6 text-muted-foreground">
-        GitHub Pages keeps the deck interactive, but the published URL is public.
-        Use this only for decks with no customer-specific data or local-only demo
-        dependencies.
+        GitHub Pages keeps the deck interactive, but the published URL is
+        public. Use this only for decks with no customer-specific data or
+        local-only demo dependencies.
       </div>
       <ol className="list-decimal space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
         <li>
@@ -239,6 +246,141 @@ function PagesDialogContent() {
           .
         </li>
       </ol>
+    </div>
+  );
+}
+
+type CopyStatus = "idle" | "success" | "error";
+
+function CopyIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M8 8h10v10H8zM6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="m5 12 4 4L19 6"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="m7 7 10 10M17 7 7 17"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+function CopyStatusIcon({ status }: { status: CopyStatus }) {
+  const iconClassName = "h-4 w-4 animate-in fade-in-0 zoom-in-75 duration-150";
+
+  if (status === "success") {
+    return <CheckIcon className={cn(iconClassName, "text-green-600")} />;
+  }
+
+  if (status === "error") {
+    return <XIcon className={cn(iconClassName, "text-red-600")} />;
+  }
+
+  return <CopyIcon className={iconClassName} />;
+}
+
+function CommandBlock({ command, label }: { command: string; label: string }) {
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
+
+  async function copyCommand() {
+    try {
+      await navigator.clipboard.writeText(command);
+      setCopyStatus("success");
+    } catch {
+      setCopyStatus("error");
+    }
+
+    window.setTimeout(() => setCopyStatus("idle"), 1600);
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
+      <div className="relative">
+        <pre className="overflow-x-auto rounded-lg border border-border bg-muted py-3 pl-3 pr-12 text-xs leading-5 text-foreground">
+          <code>{command}</code>
+        </pre>
+        <Button
+          aria-label={`Copy ${label}`}
+          className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 p-0"
+          onClick={copyCommand}
+          size="sm"
+          type="button"
+          variant="quiet"
+        >
+          <CopyStatusIcon key={copyStatus} status={copyStatus} />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AzureDialogContent() {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-4 text-sm leading-6 text-muted-foreground">
+        From the repo root, run{" "}
+        <code className="rounded bg-muted px-1.5 py-0.5 text-foreground">
+          azd up
+        </code>
+        . That provisions the Foundry models, deploys the FastAPI backend, and
+        publishes the interactive deck to Azure Static Web Apps.
+      </div>
+      <CommandBlock
+        command={azureDeployCommand}
+        label="Deploy from repo root"
+      />
+      <CommandBlock
+        command={azureUrlCommand}
+        label="After azd up finishes, print the Static Web App URL"
+      />
     </div>
   );
 }
@@ -292,7 +434,9 @@ export function ExportDialog() {
     }
   }
 
-  const activeOption = exportOptions.find((option) => option.id === activeDialog);
+  const activeOption = exportOptions.find(
+    (option) => option.id === activeDialog,
+  );
 
   return (
     <>
@@ -361,6 +505,7 @@ export function ExportDialog() {
           />
         ) : null}
         {activeDialog === "pages" ? <PagesDialogContent /> : null}
+        {activeDialog === "azure" ? <AzureDialogContent /> : null}
       </DialogShell>
     </>
   );

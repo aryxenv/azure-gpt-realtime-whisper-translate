@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "export:pdf": "node scripts/export-pdf.mjs",
     "export:pptx": "node scripts/export-pptx.mjs",
+    "azure:url": "node scripts/show-static-web-app-url.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

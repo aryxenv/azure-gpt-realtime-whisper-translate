@@ -17,6 +17,15 @@ services:
 infra:
   provider: bicep
 hooks:
+  preprovision:
+    windows:
+      shell: pwsh
+      run: ./scripts/azd/prepare-env.ps1
+      interactive: false
+    posix:
+      shell: sh
+      run: ./scripts/azd/prepare-env.sh
+      interactive: false
   postprovision:
     windows:
       shell: pwsh

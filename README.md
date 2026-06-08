@@ -58,7 +58,9 @@ already consumes the quota, keep using that existing resource or free capacity
 outside this workflow before running `azd up`. The hosted backend is always-on,
 so it has a small ongoing Container Apps cost even when no one is presenting.
 
-Sign in, create/select an azd environment, then provision:
+Sign in, create/select an azd environment, then provision. The azd preprovision
+hook defaults `AZURE_LOCATION` to `francecentral` because the realtime model
+versions in this template are configured for France Central.
 
 ```pwsh
 azd auth login
@@ -74,7 +76,6 @@ environment variables, and the post-provision hook still updates local
 
 ```env
 AZURE_OPENAI_RESOURCE_NAME=<created-resource-name>
-AZURE_OPENAI_ENDPOINT=<created-openai-compatible-endpoint>
 AZURE_OPENAI_REALTIME_DEPLOYMENT=gpt-realtime-whisper
 AZURE_OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate
 AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL=gpt-realtime-whisper

@@ -10,7 +10,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from json import JSONDecodeError
 from typing import Any
-from urllib.parse import urlparse
 
 from azure.identity.aio import DefaultAzureCredential
 from fastapi import WebSocket
@@ -108,16 +107,8 @@ def get_float_env(name: str, default: float) -> float:
 
 
 def get_azure_openai_host() -> str:
-    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-    if not endpoint:
-        resource_name = get_required_env("AZURE_OPENAI_RESOURCE_NAME")
-        endpoint = f"https://{resource_name}.openai.azure.com"
-    parsed = urlparse(endpoint if "://" in endpoint else f"https://{endpoint}")
-    host = parsed.netloc or parsed.path
-    if not host:
-        raise ValueError("Azure OpenAI endpoint must include a resource host.")
-
-    return host
+    resource_name = get_required_env("AZURE_OPENAI_RESOURCE_NAME")
+    return f"{resource_name}.openai.azure.com"
 
 
 def build_proxy_state() -> RealtimeProxyState:

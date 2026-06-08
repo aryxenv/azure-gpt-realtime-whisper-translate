@@ -78,7 +78,6 @@ module hosting './modules/hosting.bicep' = {
     tags: tags
     principalId: principalId
     openAiResourceName: foundry.outputs.openAiResourceName
-    openAiEndpoint: foundry.outputs.openAiEndpoint
     whisperDeploymentName: whisperDeploymentName
     translateDeploymentName: translateDeploymentName
   }
@@ -86,7 +85,6 @@ module hosting './modules/hosting.bicep' = {
 
 output AZURE_RESOURCE_GROUP string = resourceGroup.name
 output AZURE_OPENAI_RESOURCE_NAME string = foundry.outputs.openAiResourceName
-output AZURE_OPENAI_ENDPOINT string = foundry.outputs.openAiEndpoint
 output AZURE_AI_ACCOUNT_NAME string = foundry.outputs.foundryAccountName
 output AZURE_AI_PROJECT_NAME string = foundry.outputs.foundryProjectName
 output AZURE_AI_PROJECT_ENDPOINT string = foundry.outputs.foundryProjectEndpoint
