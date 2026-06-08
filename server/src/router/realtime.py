@@ -82,6 +82,21 @@ def get_float_env(name: str, default: float) -> float:
     return parsed
 
 
+def get_language_hint() -> str | None:
+    value = os.getenv("AZURE_OPENAI_REALTIME_LANGUAGE_HINT")
+    if not value:
+        return None
+
+    language = value.strip()
+    if "," in language:
+        raise ValueError(
+            "AZURE_OPENAI_REALTIME_LANGUAGE_HINT must be one language code, "
+            "for example 'de'. Leave it empty for automatic language detection."
+        )
+
+    return language
+
+
 def get_azure_openai_endpoint() -> str:
     resource_name = get_required_env("AZURE_OPENAI_RESOURCE_NAME")
     return f"https://{resource_name}.openai.azure.com"
@@ -127,6 +142,10 @@ def build_proxy_state() -> RealtimeProxyState:
 
 def build_session_update() -> dict[str, Any]:
     model = get_required_env("AZURE_OPENAI_REALTIME_DEPLOYMENT")
+    transcription: dict[str, Any] = {"model": model}
+    language_hint = get_language_hint()
+    if language_hint:
+        transcription["language"] = language_hint
 
     return {
         "type": "session.update",
@@ -135,7 +154,7 @@ def build_session_update() -> dict[str, Any]:
             "audio": {
                 "input": {
                     "format": {"type": "audio/pcm", "rate": PCM_SAMPLE_RATE},
-                    "transcription": {"model": model},
+                    "transcription": transcription,
                     "turn_detection": None,
                 }
             },

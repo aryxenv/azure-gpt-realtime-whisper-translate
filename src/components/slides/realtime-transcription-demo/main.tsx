@@ -154,10 +154,14 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
   const [error, setError] = useState<string | null>(null);
   const [transcriptItems, setTranscriptItems] = useState<TranscriptItem[]>([]);
   const captureRef = useRef<AudioCaptureHandles | null>(null);
+  const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const isListening = status === "listening";
   const isBusy = status === "connecting" || status === "stopping";
   const websocketUrl = useMemo(() => getRealtimeWebSocketUrl(), []);
-  const transcriptText = transcriptItems
+  const visibleTranscriptItems = transcriptItems.filter((item) =>
+    item.text.trim(),
+  );
+  const transcriptText = visibleTranscriptItems
     .map((item) => item.text)
     .join(" ")
     .trim();
@@ -336,13 +340,22 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
     return () => cleanupCapture(captureRef.current);
   }, []);
 
+  useEffect(() => {
+    const transcriptScroll = transcriptScrollRef.current;
+    if (!transcriptScroll || !transcriptText) {
+      return;
+    }
+
+    transcriptScroll.scrollTop = transcriptScroll.scrollHeight;
+  }, [transcriptText]);
+
   return (
     <SlideFrame
       eyebrow="Realtime transcription"
       title="Speak once. Watch the transcript stream back."
       titleClassName="lg:whitespace-normal"
     >
-      <div className="grid grid-cols-1 gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[0.8fr_1.2fr]">
+      <div className="grid grid-cols-1 gap-6 pb-6 sm:pb-8 lg:h-full lg:min-h-0 lg:grid-cols-[0.8fr_1.2fr]">
         <Card className="flex min-w-0 flex-col justify-between gap-6 p-6">
           <div>
             <Badge variant={isListening ? "default" : "outline"}>
@@ -402,10 +415,23 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
             </div>
             <Badge variant="muted">{transcriptItems.length} items</Badge>
           </div>
-          <div className="min-h-[18rem] flex-1 overflow-y-auto p-5 lg:min-h-0">
+          <div
+            ref={transcriptScrollRef}
+            className="min-h-[18rem] flex-1 overflow-y-auto p-5 lg:min-h-0"
+          >
             {transcriptText ? (
               <p className="whitespace-pre-wrap text-2xl leading-relaxed tracking-[-0.02em]">
-                {transcriptText}
+                {visibleTranscriptItems.map((item, index) => (
+                  <span
+                    className={cn(
+                      item.isFinal ? "text-foreground" : "text-muted-foreground",
+                    )}
+                    key={item.itemId}
+                  >
+                    {index > 0 ? " " : ""}
+                    {item.text}
+                  </span>
+                ))}
               </p>
             ) : (
               <div className="flex h-full min-h-[14rem] items-center justify-center rounded-lg border border-dashed border-border bg-muted p-6 text-center">
