@@ -16,9 +16,12 @@ from src.utils.realtime import (
     RealtimeProxyState,
     RealtimeUpstreamProtocol,
     close_if_connected,
+    discard_pending_sequence,
     get_auth_headers,
     get_azure_openai_host,
     get_required_env,
+    mark_item_finalized,
+    mark_pending_item_finalization,
     normalize_error_event,
     proxy_realtime_events,
     send_client_event,
@@ -43,6 +46,8 @@ WHISPER_UPSTREAM_PROTOCOL = RealtimeUpstreamProtocol(
     audio_append_event_type="input_audio_buffer.append",
     audio_commit_event_type="input_audio_buffer.commit",
     auto_commit_audio=True,
+    force_commit_on_stop=True,
+    wait_for_pending_finalizations_on_stop=True,
 )
 TRANSLATION_UPSTREAM_PROTOCOL = RealtimeUpstreamProtocol(
     audio_append_event_type="session.input_audio_buffer.append",
@@ -161,6 +166,7 @@ def assign_item_sequence(
 
     sequence = state.pending_sequences.popleft()
     state.item_sequences[item_id] = sequence
+    mark_pending_item_finalization(state, item_id)
     return {
         "type": "audio.committed",
         "itemId": item_id,
@@ -191,6 +197,7 @@ def normalize_transcription_completed(
     event: dict[str, Any],
 ) -> dict[str, Any]:
     item_id = event.get("item_id")
+    mark_item_finalized(state, item_id)
     normalized: dict[str, Any] = {
         "type": "transcript.completed",
         "itemId": item_id,
@@ -220,10 +227,14 @@ def normalize_whisper_event(
         return normalize_transcription_completed(state, event)
 
     if event_type == "conversation.item.input_audio_transcription.failed":
+        mark_item_finalized(state, event.get("item_id"))
         return normalize_error_event(event)
 
     if event_type == "error":
-        return normalize_error_event(event)
+        normalized = normalize_error_event(event)
+        if normalized.get("status") == "commit_skipped":
+            discard_pending_sequence(state)
+        return normalized
 
     if event_type in {"session.created", "session.updated"}:
         return {"type": "status", "status": event_type}

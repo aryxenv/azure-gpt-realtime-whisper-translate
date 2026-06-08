@@ -42,7 +42,9 @@ class RealtimeProxyState:
     uncommitted_audio_bytes: int = 0
     next_sequence: int = 1
     pending_sequences: deque[int] = field(default_factory=deque)
+    pending_item_ids: set[str] = field(default_factory=set)
     item_sequences: dict[str, int] = field(default_factory=dict)
+    finalization_event: asyncio.Event = field(default_factory=asyncio.Event)
     send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
@@ -53,6 +55,8 @@ class RealtimeUpstreamProtocol:
     session_close_event_type: str | None = None
     auto_commit_audio: bool = False
     close_session_before_drain: bool = False
+    force_commit_on_stop: bool = False
+    wait_for_pending_finalizations_on_stop: bool = False
 
 
 def get_required_env(name: str) -> str:
@@ -196,6 +200,8 @@ async def commit_audio_buffer(
     azure_realtime: Any,
     state: RealtimeProxyState,
     protocol: RealtimeUpstreamProtocol,
+    *,
+    force: bool = False,
 ) -> bool:
     if protocol.audio_commit_event_type is None:
         return False
@@ -203,7 +209,10 @@ async def commit_audio_buffer(
     async with state.send_lock:
         if (
             state.uncommitted_audio_bytes <= 0
-            or state.uncommitted_audio_bytes < state.min_commit_audio_bytes
+            or (
+                not force
+                and state.uncommitted_audio_bytes < state.min_commit_audio_bytes
+            )
         ):
             logger.debug(
                 "Skipping commit: pending_bytes=%s min_bytes=%s",
@@ -218,9 +227,74 @@ async def commit_audio_buffer(
         )
         await azure_realtime.send(json.dumps({"type": protocol.audio_commit_event_type}))
         state.pending_sequences.append(state.next_sequence)
+        state.finalization_event.set()
         state.next_sequence += 1
         state.uncommitted_audio_bytes = 0
         return True
+
+
+def mark_pending_item_finalization(
+    state: RealtimeProxyState,
+    item_id: str,
+) -> None:
+    state.pending_item_ids.add(item_id)
+    state.finalization_event.set()
+
+
+def mark_item_finalized(
+    state: RealtimeProxyState,
+    item_id: str | None,
+) -> None:
+    if not item_id:
+        return
+
+    state.pending_item_ids.discard(item_id)
+    state.finalization_event.set()
+
+
+def discard_pending_sequence(state: RealtimeProxyState) -> None:
+    if state.pending_sequences:
+        state.pending_sequences.popleft()
+        state.finalization_event.set()
+
+
+def has_pending_finalizations(state: RealtimeProxyState) -> bool:
+    return bool(state.pending_sequences or state.pending_item_ids)
+
+
+async def wait_for_pending_finalizations(
+    state: RealtimeProxyState,
+    timeout_seconds: float,
+) -> None:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_seconds
+
+    while has_pending_finalizations(state):
+        remaining_seconds = deadline - loop.time()
+        if remaining_seconds <= 0:
+            logger.info(
+                "Timed out waiting for realtime finalization: pending_sequences=%s pending_items=%s",
+                len(state.pending_sequences),
+                len(state.pending_item_ids),
+            )
+            return
+
+        state.finalization_event.clear()
+        if not has_pending_finalizations(state):
+            return
+
+        try:
+            await asyncio.wait_for(
+                state.finalization_event.wait(),
+                timeout=remaining_seconds,
+            )
+        except TimeoutError:
+            logger.info(
+                "Timed out waiting for realtime finalization: pending_sequences=%s pending_items=%s",
+                len(state.pending_sequences),
+                len(state.pending_item_ids),
+            )
+            return
 
 
 async def close_upstream_session(
@@ -259,10 +333,18 @@ async def handle_client_control(
     event_type = event.get("type")
     if event_type == "stop":
         if protocol.auto_commit_audio:
-            await commit_audio_buffer(azure_realtime, state, protocol)
+            await commit_audio_buffer(
+                azure_realtime,
+                state,
+                protocol,
+                force=protocol.force_commit_on_stop,
+            )
         if protocol.close_session_before_drain:
             await close_upstream_session(azure_realtime, state, protocol)
-        await asyncio.sleep(state.stop_drain_seconds)
+        if protocol.wait_for_pending_finalizations_on_stop:
+            await wait_for_pending_finalizations(state, state.stop_drain_seconds)
+        else:
+            await asyncio.sleep(state.stop_drain_seconds)
         if not protocol.close_session_before_drain:
             await close_upstream_session(azure_realtime, state, protocol)
         stop_event.set()
