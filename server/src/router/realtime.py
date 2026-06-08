@@ -221,6 +221,15 @@ def assign_item_sequence(
     }
 
 
+def get_text_delta(event: dict[str, Any]) -> str:
+    for field_name in ("delta", "text", "transcript"):
+        value = event.get(field_name)
+        if isinstance(value, str):
+            return value
+
+    return ""
+
+
 def normalize_transcription_delta(
     state: RealtimeProxyState,
     event: dict[str, Any],
@@ -228,10 +237,12 @@ def normalize_transcription_delta(
     item_id = event.get("item_id")
     normalized: dict[str, Any] = {
         "type": "transcript.delta",
-        "itemId": item_id,
-        "contentIndex": event.get("content_index"),
-        "delta": event.get("delta", ""),
+        "delta": get_text_delta(event),
     }
+
+    if item_id:
+        normalized["itemId"] = item_id
+        normalized["contentIndex"] = event.get("content_index")
 
     if item_id in state.item_sequences:
         normalized["sequence"] = state.item_sequences[item_id]
@@ -247,10 +258,12 @@ def normalize_transcription_completed(
     mark_item_finalized(state, item_id)
     normalized: dict[str, Any] = {
         "type": "transcript.completed",
-        "itemId": item_id,
-        "contentIndex": event.get("content_index"),
-        "transcript": event.get("transcript", ""),
+        "transcript": get_text_delta(event),
     }
+
+    if item_id:
+        normalized["itemId"] = item_id
+        normalized["contentIndex"] = event.get("content_index")
 
     if item_id in state.item_sequences:
         normalized["sequence"] = state.item_sequences[item_id]
@@ -273,6 +286,18 @@ def normalize_whisper_event(
     if event_type == "conversation.item.input_audio_transcription.completed":
         return normalize_transcription_completed(state, event)
 
+    if event_type == "session.input_transcript.delta":
+        return {
+            "type": "transcript.delta",
+            "delta": get_text_delta(event),
+        }
+
+    if event_type in {"session.input_transcript.completed", "session.input_transcript.done"}:
+        return {
+            "type": "transcript.completed",
+            "transcript": get_text_delta(event),
+        }
+
     if event_type == "conversation.item.input_audio_transcription.failed":
         mark_item_finalized(state, event.get("item_id"))
         return normalize_error_event(event)
@@ -287,15 +312,6 @@ def normalize_whisper_event(
         return {"type": "status", "status": event_type}
 
     return None
-
-
-def get_text_delta(event: dict[str, Any]) -> str:
-    for field_name in ("delta", "text", "transcript"):
-        value = event.get(field_name)
-        if isinstance(value, str):
-            return value
-
-    return ""
 
 
 def normalize_translation_event(

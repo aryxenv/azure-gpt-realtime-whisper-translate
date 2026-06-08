@@ -5,7 +5,9 @@
 The default `/realtime/whisper` route stays on standalone `gpt-realtime-whisper`.
 It is intentionally thin: the browser streams PCM audio to FastAPI, FastAPI
 forwards the chunks to the realtime transcription endpoint, and the endpoint
-produces transcript item events.
+produces transcript deltas. The server normalizes both item-scoped Whisper
+events and session-scoped transcript events into the same pure `transcript.delta`
+stream used by the translation slide.
 
 The route no longer uses local RMS filtering or timer-based commits by default.
 If the endpoint needs explicit finalization, the server sends a final commit when

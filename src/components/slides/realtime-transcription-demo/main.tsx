@@ -13,17 +13,9 @@ import { cn } from "@/lib/utils";
 
 type CaptureStatus = "idle" | "connecting" | "listening" | "stopping" | "error";
 
-interface TranscriptItem {
-  itemId: string;
-  sequence: number;
-  text: string;
-  isFinal: boolean;
-}
-
 interface TranscriptServerEvent {
   type: string;
   itemId?: string;
-  sequence?: number;
   delta?: string;
   transcript?: string;
   message?: string;
@@ -41,59 +33,24 @@ function getRealtimeWebSocketUrl() {
   return "ws://localhost:8000/realtime/whisper";
 }
 
-function upsertTranscriptItem(
-  items: TranscriptItem[],
-  itemId: string,
-  sequence: number | undefined,
-  text: string,
-  isFinal: boolean,
-) {
-  const fallbackSequence = items.length + 1;
-  const nextSequence = sequence ?? fallbackSequence;
-  const existingIndex = items.findIndex((item) => item.itemId === itemId);
-
-  if (existingIndex === -1) {
-    return [
-      ...items,
-      {
-        itemId,
-        sequence: nextSequence,
-        text,
-        isFinal,
-      },
-    ].sort((a, b) => a.sequence - b.sequence);
+function appendDelta(text: string, delta: string | undefined) {
+  if (!delta) {
+    return text;
   }
 
-  return items
-    .map((item, index) =>
-      index === existingIndex
-        ? {
-            ...item,
-            sequence: sequence ?? item.sequence,
-            text: isFinal ? text : item.text + text,
-            isFinal: item.isFinal || isFinal,
-          }
-        : item,
-    )
-    .sort((a, b) => a.sequence - b.sequence);
+  return text + delta;
 }
 
 export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [error, setError] = useState<string | null>(null);
-  const [transcriptItems, setTranscriptItems] = useState<TranscriptItem[]>([]);
+  const [transcript, setTranscript] = useState("");
   const captureRef = useRef<RealtimeAudioCaptureHandles | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const isListening = status === "listening";
   const isBusy = status === "connecting" || status === "stopping";
   const websocketUrl = useMemo(() => getRealtimeWebSocketUrl(), []);
-  const visibleTranscriptItems = transcriptItems.filter((item) =>
-    item.text.trim(),
-  );
-  const transcriptText = visibleTranscriptItems
-    .map((item) => item.text)
-    .join(" ")
-    .trim();
+  const hasTranscript = transcript.trim().length > 0;
 
   const stopListening = useCallback(() => {
     const capture = captureRef.current;
@@ -120,35 +77,22 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
       return;
     }
 
-    if (event.type === "transcript.delta" && event.itemId && event.delta) {
-      const itemId = event.itemId;
-      const delta = event.delta;
-      const sequence = event.sequence;
-      setTranscriptItems((items) =>
-        upsertTranscriptItem(items, itemId, sequence, delta, false),
-      );
+    if (event.type === "transcript.delta") {
+      setTranscript((current) => appendDelta(current, event.delta));
       return;
     }
 
-    if (event.type === "audio.committed" && event.itemId) {
-      const itemId = event.itemId;
-      const sequence = event.sequence;
-      setTranscriptItems((items) =>
-        upsertTranscriptItem(items, itemId, sequence, "", false),
-      );
+    if (event.type === "audio.committed") {
       return;
     }
 
     if (
       event.type === "transcript.completed" &&
-      event.itemId &&
       typeof event.transcript === "string"
     ) {
-      const itemId = event.itemId;
-      const sequence = event.sequence;
-      const transcript = event.transcript;
-      setTranscriptItems((items) =>
-        upsertTranscriptItem(items, itemId, sequence, transcript, true),
+      const completedTranscript = event.transcript;
+      setTranscript((current) =>
+        event.itemId ? current || completedTranscript : completedTranscript,
       );
       return;
     }
@@ -166,6 +110,7 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
 
   const startListening = useCallback(async () => {
     setError(null);
+    setTranscript("");
     setStatus("connecting");
 
     try {
@@ -223,12 +168,12 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
 
   useEffect(() => {
     const transcriptScroll = transcriptScrollRef.current;
-    if (!transcriptScroll || !transcriptText) {
+    if (!transcriptScroll || !transcript) {
       return;
     }
 
     transcriptScroll.scrollTop = transcriptScroll.scrollHeight;
-  }, [transcriptText]);
+  }, [transcript]);
 
   return (
     <SlideFrame
@@ -291,30 +236,20 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
             <div>
               <p className="font-semibold">Transcript</p>
               <p className="text-xs text-muted-foreground">
-                Ordered by realtime transcript item
+                Pure input transcript deltas
               </p>
             </div>
-            <Badge variant="muted">{transcriptItems.length} items</Badge>
+            <Badge variant={hasTranscript ? "default" : "muted"}>
+              {hasTranscript ? "Live text" : "Waiting"}
+            </Badge>
           </div>
           <div
             ref={transcriptScrollRef}
             className="min-h-[18rem] flex-1 overflow-y-auto p-5 lg:min-h-0"
           >
-            {transcriptText ? (
+            {hasTranscript ? (
               <p className="whitespace-pre-wrap text-2xl leading-relaxed tracking-[-0.02em]">
-                {visibleTranscriptItems.map((item, index) => (
-                  <span
-                    className={cn(
-                      item.isFinal
-                        ? "text-foreground"
-                        : "text-muted-foreground",
-                    )}
-                    key={item.itemId}
-                  >
-                    {index > 0 ? " " : ""}
-                    {item.text}
-                  </span>
-                ))}
+                {transcript}
               </p>
             ) : (
               <div className="flex h-full min-h-[14rem] items-center justify-center rounded-lg border border-dashed border-border bg-muted p-6 text-center">
