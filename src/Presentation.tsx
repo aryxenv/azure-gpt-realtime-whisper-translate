@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AgentDrivenAuthoring } from "@/components/slides/agent-driven-authoring/main";
 import { EmbeddedDemoWorkflow } from "@/components/slides/embedded-demo-workflow/main";
 import { PickPolishCustomization } from "@/components/slides/pick-polish-customization/main";
+import { RealtimeTranslationDemo } from "@/components/slides/realtime-translation-demo/main";
 import { RealtimeTranscriptionDemo } from "@/components/slides/realtime-transcription-demo/main";
 import { WebslidesIntroduction } from "@/components/slides/webslides-introduction/main";
 import type { SlideProps } from "@/components/slides/types";
@@ -53,6 +54,12 @@ const slides: SlideDefinition[] = [
     id: "realtime-transcription-demo",
     label: "Realtime transcription demo",
     Component: RealtimeTranscriptionDemo,
+    cycleItems: 0,
+  },
+  {
+    id: "realtime-translation-demo",
+    label: "Realtime translation demo",
+    Component: RealtimeTranslationDemo,
     cycleItems: 0,
   },
   {
@@ -188,14 +195,6 @@ function InteractivePresentation() {
     onSwipeLeft: nextSlide,
     onSwipeRight: previousSlide,
   });
-
-  useEffect(() => {
-    if (!activeSlideId) {
-      return;
-    }
-
-    setCycleState({ slideId: activeSlideId, index: 0 });
-  }, [activeSlideId]);
 
   useEffect(() => {
     function handleSpacebar(event: KeyboardEvent) {

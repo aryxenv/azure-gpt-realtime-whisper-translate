@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchHealth } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -17,23 +16,11 @@ export function ServerHealthDot() {
     queryFn: ({ signal }) => fetchHealth(signal),
   });
 
-  const resolved: Resolved | null = health.isSuccess
+  const state: "loading" | Resolved = health.isSuccess
     ? "ok"
     : health.isError
       ? "error"
-      : null;
-
-  // Initialise from the synchronous cache (avoids a gray flash on mount when a
-  // result is already cached) and stick to the last settled outcome thereafter.
-  const [shown, setShown] = useState<Resolved | null>(resolved);
-
-  useEffect(() => {
-    if (resolved && resolved !== shown) {
-      setShown(resolved);
-    }
-  }, [resolved, shown]);
-
-  const state: "loading" | Resolved = shown ?? "loading";
+      : "loading";
 
   const dot = {
     loading: "bg-muted-foreground animate-pulse",

@@ -4,10 +4,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SlideFrame } from "@/components/ui/slide-frame";
+import {
+  cleanupRealtimeAudioCapture,
+  startRealtimeAudioCapture,
+  type RealtimeAudioCaptureHandles,
+} from "@/lib/realtime-audio";
 import { cn } from "@/lib/utils";
-
-const TARGET_SAMPLE_RATE = 24000;
-const PROCESSOR_BUFFER_SIZE = 4096;
 
 type CaptureStatus = "idle" | "connecting" | "listening" | "stopping" | "error";
 
@@ -28,15 +30,6 @@ interface TranscriptServerEvent {
   status?: string;
 }
 
-interface AudioCaptureHandles {
-  context: AudioContext;
-  mute: GainNode;
-  processor: ScriptProcessorNode;
-  source: MediaStreamAudioSourceNode;
-  stream: MediaStream;
-  socket: WebSocket;
-}
-
 function getRealtimeWebSocketUrl() {
   const configuredUrl = import.meta.env.VITE_REALTIME_WS_URL as
     | string
@@ -46,44 +39,6 @@ function getRealtimeWebSocketUrl() {
   }
 
   return "ws://localhost:8000/realtime/whisper";
-}
-
-function floatToPcm16(samples: Float32Array) {
-  const buffer = new ArrayBuffer(samples.length * 2);
-  const view = new DataView(buffer);
-
-  samples.forEach((sample, index) => {
-    const clamped = Math.max(-1, Math.min(1, sample));
-    const value = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
-    view.setInt16(index * 2, value, true);
-  });
-
-  return buffer;
-}
-
-function resampleLinear(
-  samples: Float32Array,
-  fromRate: number,
-  toRate: number,
-) {
-  if (fromRate === toRate) {
-    return samples;
-  }
-
-  const ratio = fromRate / toRate;
-  const outputLength = Math.max(1, Math.round(samples.length / ratio));
-  const output = new Float32Array(outputLength);
-
-  for (let index = 0; index < outputLength; index += 1) {
-    const sourceIndex = index * ratio;
-    const lowerIndex = Math.floor(sourceIndex);
-    const upperIndex = Math.min(lowerIndex + 1, samples.length - 1);
-    const weight = sourceIndex - lowerIndex;
-    output[index] =
-      samples[lowerIndex] * (1 - weight) + samples[upperIndex] * weight;
-  }
-
-  return output;
 }
 
 function upsertTranscriptItem(
@@ -123,37 +78,11 @@ function upsertTranscriptItem(
     .sort((a, b) => a.sequence - b.sequence);
 }
 
-function cleanupCapture(
-  handles: AudioCaptureHandles | null,
-  { gracefulStop = false }: { gracefulStop?: boolean } = {},
-) {
-  if (!handles) {
-    return;
-  }
-
-  handles.processor.disconnect();
-  handles.mute.disconnect();
-  handles.source.disconnect();
-  handles.stream.getTracks().forEach((track) => track.stop());
-
-  if (handles.socket.readyState === WebSocket.OPEN) {
-    handles.socket.send(JSON.stringify({ type: "stop" }));
-  }
-
-  if (gracefulStop) {
-    window.setTimeout(() => handles.socket.close(), 1300);
-  } else {
-    handles.socket.close();
-  }
-
-  void handles.context.close();
-}
-
 export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const [transcriptItems, setTranscriptItems] = useState<TranscriptItem[]>([]);
-  const captureRef = useRef<AudioCaptureHandles | null>(null);
+  const captureRef = useRef<RealtimeAudioCaptureHandles | null>(null);
   const transcriptScrollRef = useRef<HTMLDivElement | null>(null);
   const isListening = status === "listening";
   const isBusy = status === "connecting" || status === "stopping";
@@ -174,13 +103,16 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
     }
 
     setStatus("stopping");
-    cleanupCapture(capture, { gracefulStop: true });
+    cleanupRealtimeAudioCapture(capture, { gracefulStop: true });
     captureRef.current = null;
   }, []);
 
-  const handleServerMessage = useCallback((message: MessageEvent<string>) => {
+  const handleServerMessage = useCallback((message: MessageEvent) => {
     let event: TranscriptServerEvent;
     try {
+      if (typeof message.data !== "string") {
+        throw new Error("Realtime server sent a non-text message.");
+      }
       event = JSON.parse(message.data) as TranscriptServerEvent;
     } catch {
       setError("Realtime server sent a non-JSON message.");
@@ -189,21 +121,20 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
     }
 
     if (event.type === "transcript.delta" && event.itemId && event.delta) {
+      const itemId = event.itemId;
+      const delta = event.delta;
+      const sequence = event.sequence;
       setTranscriptItems((items) =>
-        upsertTranscriptItem(
-          items,
-          event.itemId,
-          event.sequence,
-          event.delta ?? "",
-          false,
-        ),
+        upsertTranscriptItem(items, itemId, sequence, delta, false),
       );
       return;
     }
 
     if (event.type === "audio.committed" && event.itemId) {
+      const itemId = event.itemId;
+      const sequence = event.sequence;
       setTranscriptItems((items) =>
-        upsertTranscriptItem(items, event.itemId, event.sequence, "", false),
+        upsertTranscriptItem(items, itemId, sequence, "", false),
       );
       return;
     }
@@ -213,14 +144,11 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
       event.itemId &&
       typeof event.transcript === "string"
     ) {
+      const itemId = event.itemId;
+      const sequence = event.sequence;
+      const transcript = event.transcript;
       setTranscriptItems((items) =>
-        upsertTranscriptItem(
-          items,
-          event.itemId,
-          event.sequence,
-          event.transcript ?? "",
-          true,
-        ),
+        upsertTranscriptItem(items, itemId, sequence, transcript, true),
       );
       return;
     }
@@ -239,74 +167,27 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
   const startListening = useCallback(async () => {
     setError(null);
     setStatus("connecting");
-    let stream: MediaStream | null = null;
 
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const socket = new WebSocket(websocketUrl);
-      socket.binaryType = "arraybuffer";
-
-      await new Promise<void>((resolve, reject) => {
-        socket.addEventListener("open", () => resolve(), { once: true });
-        socket.addEventListener(
-          "error",
-          () => reject(new Error("Could not connect to realtime server.")),
-          { once: true },
-        );
+      captureRef.current = await startRealtimeAudioCapture({
+        websocketUrl,
+        onMessage: handleServerMessage,
+        onSocketError: () => {
+          setError("Realtime server websocket failed.");
+          setStatus("error");
+        },
+        onSocketClose: () => {
+          captureRef.current = null;
+          setStatus((current) =>
+            current === "stopping" || current === "listening"
+              ? "idle"
+              : current,
+          );
+        },
       });
-
-      const context = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
-      const source = context.createMediaStreamSource(stream);
-      const processor = context.createScriptProcessor(
-        PROCESSOR_BUFFER_SIZE,
-        1,
-        1,
-      );
-      const mute = context.createGain();
-      mute.gain.value = 0;
-
-      socket.addEventListener("message", handleServerMessage);
-      socket.addEventListener("error", () => {
-        setError("Realtime server websocket failed.");
-        setStatus("error");
-      });
-      socket.addEventListener("close", () => {
-        captureRef.current = null;
-        setStatus((current) =>
-          current === "stopping" || current === "listening" ? "idle" : current,
-        );
-      });
-
-      processor.onaudioprocess = (event) => {
-        if (socket.readyState !== WebSocket.OPEN) {
-          return;
-        }
-
-        const input = event.inputBuffer.getChannelData(0);
-        const samples = resampleLinear(
-          input,
-          context.sampleRate,
-          TARGET_SAMPLE_RATE,
-        );
-        socket.send(floatToPcm16(samples));
-      };
-
-      source.connect(processor);
-      processor.connect(mute);
-      mute.connect(context.destination);
-
-      captureRef.current = {
-        context,
-        mute,
-        processor,
-        source,
-        stream,
-        socket,
-      };
       setStatus("listening");
     } catch (startError) {
-      cleanupCapture(captureRef.current);
-      stream?.getTracks().forEach((track) => track.stop());
+      cleanupRealtimeAudioCapture(captureRef.current);
       captureRef.current = null;
       setError(
         startError instanceof Error
@@ -337,7 +218,7 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
   }, [isActive, stopListening]);
 
   useEffect(() => {
-    return () => cleanupCapture(captureRef.current);
+    return () => cleanupRealtimeAudioCapture(captureRef.current);
   }, []);
 
   useEffect(() => {
@@ -355,7 +236,7 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
       title="Speak once. Watch the transcript stream back."
       titleClassName="lg:whitespace-normal"
     >
-      <div className="grid grid-cols-1 gap-6 pb-6 sm:pb-8 lg:h-full lg:min-h-0 lg:grid-cols-[0.8fr_1.2fr]">
+      <div className="grid grid-cols-1 gap-6 lg:h-full lg:min-h-0 lg:grid-cols-[0.8fr_1.2fr]">
         <Card className="flex min-w-0 flex-col justify-between gap-6 p-6">
           <div>
             <Badge variant={isListening ? "default" : "outline"}>
@@ -424,7 +305,9 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
                 {visibleTranscriptItems.map((item, index) => (
                   <span
                     className={cn(
-                      item.isFinal ? "text-foreground" : "text-muted-foreground",
+                      item.isFinal
+                        ? "text-foreground"
+                        : "text-muted-foreground",
                     )}
                     key={item.itemId}
                   >

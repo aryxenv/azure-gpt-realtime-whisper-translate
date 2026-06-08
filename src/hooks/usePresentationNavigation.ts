@@ -20,6 +20,7 @@ export function usePresentationNavigation(slideIds: readonly string[]) {
   const [activeIndex, setActiveIndex] = useState(() =>
     readIndexFromUrl(slideIds),
   );
+  const safeActiveIndex = Math.min(activeIndex, Math.max(slideCount - 1, 0));
 
   const previousSlide = useCallback(() => {
     setActiveIndex((current) =>
@@ -33,14 +34,10 @@ export function usePresentationNavigation(slideIds: readonly string[]) {
     );
   }, [slideCount]);
 
-  useEffect(() => {
-    setActiveIndex((current) => Math.min(current, Math.max(slideCount - 1, 0)));
-  }, [slideCount]);
-
   // Reflect the active slide in the URL (?slide=<id>) so refreshing returns to
   // the same slide and the link can be shared.
   useEffect(() => {
-    const id = slideIds[activeIndex];
+    const id = slideIds[safeActiveIndex];
     if (!id) {
       return;
     }
@@ -57,7 +54,7 @@ export function usePresentationNavigation(slideIds: readonly string[]) {
       "",
       `${window.location.pathname}?${query}${window.location.hash}`,
     );
-  }, [activeIndex, slideIds]);
+  }, [safeActiveIndex, slideIds]);
 
   // Respond to back/forward navigation and manual URL edits.
   useEffect(() => {
@@ -95,13 +92,13 @@ export function usePresentationNavigation(slideIds: readonly string[]) {
 
   return useMemo(
     () => ({
-      activeIndex,
+      activeIndex: safeActiveIndex,
       canGoNext: slideCount > 1,
       canGoPrevious: slideCount > 1,
       nextSlide,
       previousSlide,
-      progress: slideCount === 0 ? 0 : (activeIndex + 1) / slideCount,
+      progress: slideCount === 0 ? 0 : (safeActiveIndex + 1) / slideCount,
     }),
-    [activeIndex, nextSlide, previousSlide, slideCount],
+    [nextSlide, previousSlide, safeActiveIndex, slideCount],
   );
 }

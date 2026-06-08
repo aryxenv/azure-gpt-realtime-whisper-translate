@@ -59,8 +59,8 @@ export function SlideFrame({
           </h1>
         </div>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto pt-6 sm:pt-8 lg:overflow-hidden">
-        <div className="pb-5 sm:pb-8 lg:h-full lg:pb-0">{children}</div>
+      <div className="no-scrollbar min-h-0 flex-1 overflow-y-auto pt-6 sm:pt-8">
+        <div className="pb-5 sm:pb-8 lg:h-full">{children}</div>
       </div>
     </section>
   );

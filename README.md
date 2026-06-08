@@ -30,6 +30,14 @@ uv run fastapi dev
 
 Available at http://localhost:8000 (no config needed - automatically available on client)
 
+The realtime demo slides use local WebSocket routes:
+
+- `/realtime/whisper` streams browser microphone audio to the Whisper
+  transcription session.
+- `/realtime/translation` streams browser microphone audio to the translation
+  session. The slide sends the selected target language when it opens the
+  websocket.
+
 ## Controls
 
 - **Left / Right arrows**: move between slides on a computer.
@@ -93,10 +101,10 @@ follows the matching skill:
 - **Edit a slide**: change copy, layout, styling, or interactions safely.
 - **Integrate demo into slides**: drop in a whole app (in the repo or shared in
   chat) and map it into the deck, wiring up the `server/` backend if needed.
-Slides live in `src/components/slides/<topic>/` and are listed, in order, in
-`src/Presentation.tsx`. Folders are named by topic (not `slide_1`, `slide_2`), so
-slides can be inserted or reordered freely. Demos that need backend logic use the
-FastAPI app in `server/`. The skills cover the details.
+  Slides live in `src/components/slides/<topic>/` and are listed, in order, in
+  `src/Presentation.tsx`. Folders are named by topic (not `slide_1`, `slide_2`), so
+  slides can be inserted or reordered freely. Demos that need backend logic use the
+  FastAPI app in `server/`. The skills cover the details.
 
 ## Share / deploy to GitHub Pages
 

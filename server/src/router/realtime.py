@@ -1,85 +1,53 @@
-import asyncio
-import base64
 import json
 import logging
-import math
 import os
-import struct
-from collections import deque
-from dataclasses import dataclass, field
-from json import JSONDecodeError
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote
 
 from azure.core.exceptions import AzureError
 from azure.identity.aio import DefaultAzureCredential
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
-from starlette.websockets import WebSocketState
 from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
+
+from src.utils.realtime import (
+    PCM_SAMPLE_RATE,
+    RealtimeEventNormalizer,
+    RealtimeProxyState,
+    RealtimeUpstreamProtocol,
+    close_if_connected,
+    get_auth_headers,
+    get_azure_openai_host,
+    get_required_env,
+    normalize_error_event,
+    proxy_realtime_events,
+    send_client_event,
+)
 
 router = APIRouter(prefix="/realtime", tags=["realtime"])
 logger = logging.getLogger(__name__)
 
-DEFAULT_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default"
-DEFAULT_COMMIT_INTERVAL_MS = 2000
-DEFAULT_MIN_COMMIT_AUDIO_MS = 500
-DEFAULT_MIN_AUDIO_RMS = 0.01
-DEFAULT_STOP_DRAIN_MS = 2200
-PCM_SAMPLE_RATE = 24000
-PCM_BYTES_PER_SAMPLE = 2
-
-
-@dataclass
-class RealtimeProxyState:
-    commit_interval_seconds: float
-    min_audio_rms: float
-    min_commit_audio_bytes: int
-    stop_drain_seconds: float
-    uncommitted_audio_bytes: int = 0
-    next_sequence: int = 1
-    pending_sequences: deque[int] = field(default_factory=deque)
-    item_sequences: dict[str, int] = field(default_factory=dict)
-    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-
-
-def get_required_env(name: str) -> str:
-    value = os.getenv(name)
-    if not value:
-        raise ValueError(f"{name} environment variable is not set.")
-    return value
-
-
-def get_int_env(name: str, default: int) -> int:
-    value = os.getenv(name)
-    if value is None:
-        return default
-
-    try:
-        parsed = int(value)
-    except ValueError as error:
-        raise ValueError(f"{name} must be an integer.") from error
-
-    if parsed <= 0:
-        raise ValueError(f"{name} must be greater than zero.")
-
-    return parsed
-
-
-def get_float_env(name: str, default: float) -> float:
-    value = os.getenv(name)
-    if value is None:
-        return default
-
-    try:
-        parsed = float(value)
-    except ValueError as error:
-        raise ValueError(f"{name} must be a number.") from error
-
-    if parsed < 0 or parsed > 1:
-        raise ValueError(f"{name} must be between 0 and 1.")
-
-    return parsed
+DEFAULT_TRANSLATION_MODEL = "gpt-realtime-translate"
+DEFAULT_TRANSLATION_INPUT_TRANSCRIPTION_MODEL = "gpt-realtime-whisper"
+DEFAULT_TRANSLATION_LANGUAGE = "nl"
+SUPPORTED_TRANSLATION_LANGUAGES = {
+    "nl": "Dutch",
+    "en": "English",
+    "fr": "French",
+    "de": "German",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+}
+WHISPER_UPSTREAM_PROTOCOL = RealtimeUpstreamProtocol(
+    audio_append_event_type="input_audio_buffer.append",
+    audio_commit_event_type="input_audio_buffer.commit",
+    auto_commit_audio=True,
+)
+TRANSLATION_UPSTREAM_PROTOCOL = RealtimeUpstreamProtocol(
+    audio_append_event_type="session.input_audio_buffer.append",
+    session_close_event_type="session.close",
+)
 
 
 def get_language_hint() -> str | None:
@@ -97,50 +65,30 @@ def get_language_hint() -> str | None:
     return language
 
 
-def get_azure_openai_endpoint() -> str:
-    resource_name = get_required_env("AZURE_OPENAI_RESOURCE_NAME")
-    return f"https://{resource_name}.openai.azure.com"
+def get_optional_model_env(name: str, default: str) -> str:
+    value = os.getenv(name, default).strip()
+    if not value:
+        raise ValueError(f"{name} must not be empty.")
+
+    return value
 
 
-def build_realtime_url() -> str:
-    endpoint = get_azure_openai_endpoint()
-    parsed = urlparse(endpoint if "://" in endpoint else f"https://{endpoint}")
-    host = parsed.netloc or parsed.path
-    if not host:
-        raise ValueError("Azure OpenAI endpoint must include a resource host.")
-
-    return f"wss://{host}/openai/v1/realtime?intent=transcription"
+def build_whisper_realtime_url() -> str:
+    return f"wss://{get_azure_openai_host()}/openai/v1/realtime?intent=transcription"
 
 
-def build_proxy_state() -> RealtimeProxyState:
-    min_commit_audio_ms = get_int_env(
-        "AZURE_OPENAI_REALTIME_MIN_COMMIT_AUDIO_MS",
-        DEFAULT_MIN_COMMIT_AUDIO_MS,
+def build_translation_realtime_url() -> str:
+    model = get_optional_model_env(
+        "AZURE_OPENAI_REALTIME_TRANSLATION_MODEL",
+        DEFAULT_TRANSLATION_MODEL,
     )
-    min_commit_audio_bytes = int(
-        PCM_SAMPLE_RATE * PCM_BYTES_PER_SAMPLE * (min_commit_audio_ms / 1000)
-    )
-
-    return RealtimeProxyState(
-        commit_interval_seconds=get_int_env(
-            "AZURE_OPENAI_REALTIME_COMMIT_INTERVAL_MS",
-            DEFAULT_COMMIT_INTERVAL_MS,
-        )
-        / 1000,
-        min_audio_rms=get_float_env(
-            "AZURE_OPENAI_REALTIME_MIN_AUDIO_RMS",
-            DEFAULT_MIN_AUDIO_RMS,
-        ),
-        min_commit_audio_bytes=min_commit_audio_bytes,
-        stop_drain_seconds=get_int_env(
-            "AZURE_OPENAI_REALTIME_STOP_DRAIN_MS",
-            DEFAULT_STOP_DRAIN_MS,
-        )
-        / 1000,
+    return (
+        f"wss://{get_azure_openai_host()}/openai/v1/realtime/translations"
+        f"?model={quote(model, safe='')}"
     )
 
 
-def build_session_update() -> dict[str, Any]:
+def build_whisper_session_update() -> dict[str, Any]:
     model = get_required_env("AZURE_OPENAI_REALTIME_DEPLOYMENT")
     transcription: dict[str, Any] = {"model": model}
     language_hint = get_language_hint()
@@ -162,175 +110,44 @@ def build_session_update() -> dict[str, Any]:
     }
 
 
-async def get_auth_headers(credential: DefaultAzureCredential) -> dict[str, str]:
-    token_scope = os.getenv("AZURE_OPENAI_TOKEN_SCOPE", DEFAULT_TOKEN_SCOPE)
-    token = await credential.get_token(token_scope)
-    return {"Authorization": f"Bearer {token.token}"}
-
-
-async def close_if_connected(websocket: WebSocket, code: int, reason: str) -> None:
-    if websocket.application_state == WebSocketState.CONNECTED:
-        await websocket.close(code=code, reason=reason)
-
-
-async def send_client_event(client: WebSocket, event: dict[str, Any]) -> None:
-    if client.application_state == WebSocketState.CONNECTED:
-        await client.send_text(json.dumps(event))
-
-
-def get_pcm16_rms(audio_bytes: bytes) -> float:
-    sample_count = len(audio_bytes) // PCM_BYTES_PER_SAMPLE
-    if sample_count == 0:
-        return 0
-
-    samples = struct.unpack(
-        f"<{sample_count}h",
-        audio_bytes[: sample_count * PCM_BYTES_PER_SAMPLE],
+def get_translation_target_language(websocket: WebSocket) -> str:
+    value = (
+        websocket.query_params.get("targetLanguage")
+        or websocket.query_params.get("language")
+        or DEFAULT_TRANSLATION_LANGUAGE
     )
-    square_sum = sum(sample * sample for sample in samples)
-    return math.sqrt(square_sum / sample_count) / 32768
-
-
-async def append_audio_chunk(
-    azure_realtime: Any,
-    state: RealtimeProxyState,
-    audio_bytes: bytes,
-) -> bool:
-    rms = get_pcm16_rms(audio_bytes)
-    if rms < state.min_audio_rms:
-        logger.debug("Skipping low-energy audio chunk: rms=%.5f", rms)
-        return False
-
-    audio_event = {
-        "type": "input_audio_buffer.append",
-        "audio": base64.b64encode(audio_bytes).decode("ascii"),
-    }
-
-    async with state.send_lock:
-        await azure_realtime.send(json.dumps(audio_event))
-        state.uncommitted_audio_bytes += len(audio_bytes)
-        logger.debug(
-            "Appended audio chunk: bytes=%s rms=%.5f pending_bytes=%s",
-            len(audio_bytes),
-            rms,
-            state.uncommitted_audio_bytes,
+    language = value.strip().lower()
+    if language not in SUPPORTED_TRANSLATION_LANGUAGES:
+        supported = ", ".join(sorted(SUPPORTED_TRANSLATION_LANGUAGES))
+        raise ValueError(
+            f"Unsupported translation target language '{value}'. "
+            f"Supported languages: {supported}."
         )
-        return True
+
+    return language
 
 
-async def commit_audio_buffer(
-    azure_realtime: Any,
-    state: RealtimeProxyState,
-) -> bool:
-    async with state.send_lock:
-        if (
-            state.uncommitted_audio_bytes <= 0
-            or state.uncommitted_audio_bytes < state.min_commit_audio_bytes
-        ):
-            logger.debug(
-                "Skipping commit: pending_bytes=%s min_bytes=%s",
-                state.uncommitted_audio_bytes,
-                state.min_commit_audio_bytes,
-            )
-            return False
+def build_translation_session_update(target_language: str) -> dict[str, Any]:
+    input_model = get_optional_model_env(
+        "AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL",
+        DEFAULT_TRANSLATION_INPUT_TRANSCRIPTION_MODEL,
+    )
 
-        logger.info(
-            "Committing realtime audio buffer: bytes=%s",
-            state.uncommitted_audio_bytes,
-        )
-        await azure_realtime.send(json.dumps({"type": "input_audio_buffer.commit"}))
-        state.pending_sequences.append(state.next_sequence)
-        state.next_sequence += 1
-        state.uncommitted_audio_bytes = 0
-        return True
-
-
-async def handle_client_control(
-    client: WebSocket,
-    azure_realtime: Any,
-    state: RealtimeProxyState,
-    stop_event: asyncio.Event,
-    message: str,
-) -> None:
-    try:
-        event = json.loads(message)
-    except JSONDecodeError:
-        await send_client_event(
-            client,
-            {
-                "type": "error",
-                "message": "Client websocket text messages must be JSON.",
-            },
-        )
-        return
-
-    event_type = event.get("type")
-    if event_type == "stop":
-        await commit_audio_buffer(azure_realtime, state)
-        await asyncio.sleep(state.stop_drain_seconds)
-        stop_event.set()
-        return
-
-    if event_type == "commit":
-        committed = await commit_audio_buffer(azure_realtime, state)
-        if not committed:
-            await send_client_event(
-                client,
-                {
-                    "type": "status",
-                    "status": "commit_skipped",
-                    "reason": "No pending audio to commit.",
+    return {
+        "type": "session.update",
+        "session": {
+            "audio": {
+                "input": {
+                    "transcription": {
+                        "model": input_model,
+                    },
                 },
-            )
-        return
-
-    await send_client_event(
-        client,
-        {
-            "type": "error",
-            "message": f"Unsupported client event type: {event_type}",
+                "output": {
+                    "language": target_language,
+                },
+            },
         },
-    )
-
-
-async def forward_client_events(
-    client: WebSocket,
-    azure_realtime: Any,
-    state: RealtimeProxyState,
-    stop_event: asyncio.Event,
-) -> None:
-    while not stop_event.is_set():
-        message = await client.receive()
-        message_type = message["type"]
-
-        if message_type == "websocket.disconnect":
-            stop_event.set()
-            return
-
-        text = message.get("text")
-        if text is not None:
-            await handle_client_control(
-                client,
-                azure_realtime,
-                state,
-                stop_event,
-                text,
-            )
-            continue
-
-        audio_bytes = message.get("bytes")
-        if audio_bytes is not None:
-            await append_audio_chunk(azure_realtime, state, audio_bytes)
-
-
-async def auto_commit_audio(
-    azure_realtime: Any,
-    state: RealtimeProxyState,
-    stop_event: asyncio.Event,
-) -> None:
-    while not stop_event.is_set():
-        await asyncio.sleep(state.commit_interval_seconds)
-        await commit_audio_buffer(azure_realtime, state)
+    }
 
 
 def assign_item_sequence(
@@ -386,31 +203,7 @@ def normalize_transcription_completed(
     return normalized
 
 
-def normalize_error_event(event: dict[str, Any]) -> dict[str, Any]:
-    error = event.get("error")
-    message = None
-    if isinstance(error, dict):
-        message = error.get("message")
-
-    message = message or event.get("message") or "Azure realtime error."
-    if "buffer too small" in message.lower():
-        logger.info("Azure skipped a too-small audio commit: %s", message)
-        return {
-            "type": "status",
-            "status": "commit_skipped",
-            "reason": message,
-            "source": "azure",
-        }
-
-    logger.warning("Azure realtime error: %s", message)
-    return {
-        "type": "error",
-        "message": message,
-        "source": "azure",
-    }
-
-
-def normalize_azure_event(
+def normalize_whisper_event(
     state: RealtimeProxyState,
     event: dict[str, Any],
 ) -> dict[str, Any] | None:
@@ -437,79 +230,76 @@ def normalize_azure_event(
     return None
 
 
-async def forward_azure_events(
-    client: WebSocket,
-    azure_realtime: Any,
-    state: RealtimeProxyState,
+def get_text_delta(event: dict[str, Any]) -> str:
+    for field_name in ("delta", "text", "transcript"):
+        value = event.get(field_name)
+        if isinstance(value, str):
+            return value
+
+    return ""
+
+
+def normalize_translation_event(
+    _state: RealtimeProxyState,
+    event: dict[str, Any],
+) -> dict[str, Any] | None:
+    event_type = event.get("type")
+
+    if event_type == "session.input_transcript.delta":
+        return {
+            "type": "transcript.delta",
+            "delta": get_text_delta(event),
+        }
+
+    if event_type == "session.output_transcript.delta":
+        return {
+            "type": "translation.delta",
+            "delta": get_text_delta(event),
+        }
+
+    if event_type in {"session.input_transcript.completed", "session.input_transcript.done"}:
+        return {
+            "type": "transcript.completed",
+            "transcript": get_text_delta(event),
+        }
+
+    if event_type in {
+        "session.output_transcript.completed",
+        "session.output_transcript.done",
+    }:
+        return {
+            "type": "translation.completed",
+            "translation": get_text_delta(event),
+        }
+
+    if event_type == "session.output_audio.delta":
+        return None
+
+    if event_type == "error":
+        return normalize_error_event(event)
+
+    if event_type in {"session.created", "session.updated"}:
+        return {"type": "status", "status": event_type}
+
+    return None
+
+
+async def run_realtime_proxy(
+    websocket: WebSocket,
+    realtime_url: str,
+    session_update: dict[str, Any],
+    normalize_event: RealtimeEventNormalizer,
+    *,
+    additional_headers: dict[str, str] | None = None,
+    protocol: RealtimeUpstreamProtocol,
 ) -> None:
-    async for message in azure_realtime:
-        if isinstance(message, bytes):
-            continue
-
-        try:
-            event = json.loads(message)
-        except JSONDecodeError:
-            await send_client_event(
-                client,
-                {
-                    "type": "error",
-                    "message": "Azure realtime sent a non-JSON message.",
-                    "source": "azure",
-                },
-            )
-            continue
-
-        normalized = normalize_azure_event(state, event)
-        if normalized is not None:
-            await send_client_event(client, normalized)
-
-
-async def proxy_realtime_events(client: WebSocket, azure_realtime: Any) -> None:
-    state = build_proxy_state()
-    stop_event = asyncio.Event()
-    client_to_azure = asyncio.create_task(
-        forward_client_events(client, azure_realtime, state, stop_event)
-    )
-    azure_to_client = asyncio.create_task(
-        forward_azure_events(client, azure_realtime, state)
-    )
-    commit_loop = asyncio.create_task(
-        auto_commit_audio(azure_realtime, state, stop_event)
-    )
-    tasks = {client_to_azure, azure_to_client, commit_loop}
-
-    done, pending = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
-    for task in pending:
-        task.cancel()
-
-    await asyncio.gather(*pending, return_exceptions=True)
-    for task in done:
-        if not task.cancelled():
-            task.result()
-
-
-@router.websocket("/whisper")
-async def whisper(websocket: WebSocket) -> None:
-    await websocket.accept()
-
-    try:
-        realtime_url = build_realtime_url()
-        session_update = build_session_update()
-    except ValueError as error:
-        logger.warning("Invalid realtime configuration: %s", error)
-        await close_if_connected(
-            websocket,
-            status.WS_1011_INTERNAL_ERROR,
-            "Invalid Azure OpenAI realtime configuration.",
-        )
-        return
-
     credential = DefaultAzureCredential()
     try:
         auth_headers = await get_auth_headers(credential)
+        headers = {**auth_headers, **(additional_headers or {})}
         async with connect(
             realtime_url,
-            additional_headers=auth_headers,
+            additional_headers=headers,
             max_size=None,
         ) as azure_realtime:
             await azure_realtime.send(json.dumps(session_update))
@@ -520,7 +310,12 @@ async def whisper(websocket: WebSocket) -> None:
                     "status": "connected",
                 },
             )
-            await proxy_realtime_events(websocket, azure_realtime)
+            await proxy_realtime_events(
+                websocket,
+                azure_realtime,
+                normalize_event,
+                protocol=protocol,
+            )
     except WebSocketDisconnect:
         return
     except AzureError:
@@ -539,3 +334,65 @@ async def whisper(websocket: WebSocket) -> None:
         )
     finally:
         await credential.close()
+
+
+@router.websocket("/whisper")
+async def whisper(websocket: WebSocket) -> None:
+    await websocket.accept()
+
+    try:
+        realtime_url = build_whisper_realtime_url()
+        session_update = build_whisper_session_update()
+    except ValueError as error:
+        logger.warning("Invalid realtime configuration: %s", error)
+        await close_if_connected(
+            websocket,
+            status.WS_1011_INTERNAL_ERROR,
+            "Invalid Azure OpenAI realtime configuration.",
+        )
+        return
+
+    await run_realtime_proxy(
+        websocket,
+        realtime_url,
+        session_update,
+        normalize_whisper_event,
+        protocol=WHISPER_UPSTREAM_PROTOCOL,
+    )
+
+
+@router.websocket("/translation")
+async def translation(websocket: WebSocket) -> None:
+    await websocket.accept()
+
+    try:
+        target_language = get_translation_target_language(websocket)
+    except ValueError as error:
+        logger.warning("Invalid realtime translation language: %s", error)
+        await close_if_connected(
+            websocket,
+            status.WS_1008_POLICY_VIOLATION,
+            "Unsupported translation target language.",
+        )
+        return
+
+    try:
+        realtime_url = build_translation_realtime_url()
+        session_update = build_translation_session_update(target_language)
+    except ValueError as error:
+        logger.warning("Invalid realtime translation configuration: %s", error)
+        await close_if_connected(
+            websocket,
+            status.WS_1011_INTERNAL_ERROR,
+            "Invalid Azure OpenAI realtime translation configuration.",
+        )
+        return
+
+    await run_realtime_proxy(
+        websocket,
+        realtime_url,
+        session_update,
+        normalize_translation_event,
+        additional_headers={"openai-alpha": "translation=v1"},
+        protocol=TRANSLATION_UPSTREAM_PROTOCOL,
+    )
