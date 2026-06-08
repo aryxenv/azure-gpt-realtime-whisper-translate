@@ -1,30 +1,46 @@
 # Realtime transcription notes
 
-## Quality Control Delay
+## Standalone Whisper path
+
+The default `/realtime/whisper` route stays on standalone `gpt-realtime-whisper`.
+It is intentionally thin: the browser streams PCM audio to FastAPI, FastAPI
+forwards the chunks to the realtime transcription endpoint, and the endpoint
+produces transcript item events.
+
+The route no longer uses local RMS filtering or timer-based commits by default.
+If the endpoint needs explicit finalization, the server sends a final commit when
+the microphone stops.
+
+## Optional transcription delay
 
 OpenAI's Realtime transcription docs list `audio.input.transcription.delay` as
 an optional latency/accuracy tradeoff for `gpt-realtime-whisper`, with values
-`minimal`, `low`, `medium`, `high`, and `xhigh`.
-
-Azure's current Realtime wrapper for this deployment rejects that field with:
-
-```text
-Unknown parameter: 'session.audio.input.transcription.delay'
-```
-
-So the implementation intentionally omits `delay` from `session.update` for now.
-Quality/latency tuning currently happens through the server's manual commit
-window instead:
+`minimal`, `low`, `medium`, `high`, and `xhigh`. Azure support can vary by
+deployment, so the backend only sends the field when configured:
 
 ```env
+AZURE_OPENAI_REALTIME_TRANSCRIPTION_DELAY=high
+```
+
+Leave it unset if Azure rejects the field.
+
+## Fallback commit modes
+
+The default commit strategy is `none`: append all audio and only finalize on
+stop. Manual segmentation is still available as a fallback:
+
+```env
+AZURE_OPENAI_REALTIME_COMMIT_STRATEGY=silence
 AZURE_OPENAI_REALTIME_COMMIT_INTERVAL_MS=2000
+AZURE_OPENAI_REALTIME_SILENCE_COMMIT_MS=900
+AZURE_OPENAI_REALTIME_MAX_COMMIT_AUDIO_MS=12000
 AZURE_OPENAI_REALTIME_MIN_COMMIT_AUDIO_MS=500
 AZURE_OPENAI_REALTIME_MIN_AUDIO_RMS=0.01
 AZURE_OPENAI_REALTIME_STOP_DRAIN_MS=2200
 ```
 
-Longer commit windows usually improve transcription quality by giving the model
-more audio context, but transcript updates arrive later.
+Use `silence` or `fixed` only when the endpoint-first path does not provide the
+latency/quality behavior needed for a specific demo.
 
 ## Language hints
 

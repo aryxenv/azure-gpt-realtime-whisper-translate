@@ -247,8 +247,8 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
             </p>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               Audio streams through the local FastAPI websocket. The server
-              commits short PCM windows and returns transcript events for this
-              slide to render.
+              stays thin, forwards PCM chunks, and lets the realtime endpoint
+              produce transcript events for this slide to render.
             </p>
           </div>
 
@@ -291,7 +291,7 @@ export function RealtimeTranscriptionDemo({ isActive }: SlideProps) {
             <div>
               <p className="font-semibold">Transcript</p>
               <p className="text-xs text-muted-foreground">
-                Ordered by committed audio window
+                Ordered by realtime transcript item
               </p>
             </div>
             <Badge variant="muted">{transcriptItems.length} items</Badge>

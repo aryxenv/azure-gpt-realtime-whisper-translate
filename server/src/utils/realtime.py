@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default"
 DEFAULT_COMMIT_INTERVAL_MS = 2000
+DEFAULT_SILENCE_COMMIT_MS = 900
+DEFAULT_MAX_COMMIT_AUDIO_MS = 12000
 DEFAULT_MIN_COMMIT_AUDIO_MS = 500
 DEFAULT_MIN_AUDIO_RMS = 0.01
 DEFAULT_STOP_DRAIN_MS = 2200
@@ -36,10 +38,13 @@ RealtimeEventNormalizer = Callable[
 @dataclass
 class RealtimeProxyState:
     commit_interval_seconds: float
+    silence_commit_seconds: float
+    max_commit_audio_bytes: int
     min_audio_rms: float
     min_commit_audio_bytes: int
     stop_drain_seconds: float
     uncommitted_audio_bytes: int = 0
+    silent_audio_seconds: float = 0
     next_sequence: int = 1
     pending_sequences: deque[int] = field(default_factory=deque)
     pending_item_ids: set[str] = field(default_factory=set)
@@ -53,7 +58,8 @@ class RealtimeUpstreamProtocol:
     audio_append_event_type: str
     audio_commit_event_type: str | None = None
     session_close_event_type: str | None = None
-    auto_commit_audio: bool = False
+    commit_strategy: str = "none"
+    filter_low_energy_audio: bool = True
     close_session_before_drain: bool = False
     force_commit_on_stop: bool = False
     wait_for_pending_finalizations_on_stop: bool = False
@@ -118,12 +124,26 @@ def build_proxy_state() -> RealtimeProxyState:
         PCM_SAMPLE_RATE * PCM_BYTES_PER_SAMPLE * (min_commit_audio_ms / 1000)
     )
 
+    max_commit_audio_ms = get_int_env(
+        "AZURE_OPENAI_REALTIME_MAX_COMMIT_AUDIO_MS",
+        DEFAULT_MAX_COMMIT_AUDIO_MS,
+    )
+    max_commit_audio_bytes = int(
+        PCM_SAMPLE_RATE * PCM_BYTES_PER_SAMPLE * (max_commit_audio_ms / 1000)
+    )
+
     return RealtimeProxyState(
         commit_interval_seconds=get_int_env(
             "AZURE_OPENAI_REALTIME_COMMIT_INTERVAL_MS",
             DEFAULT_COMMIT_INTERVAL_MS,
         )
         / 1000,
+        silence_commit_seconds=get_int_env(
+            "AZURE_OPENAI_REALTIME_SILENCE_COMMIT_MS",
+            DEFAULT_SILENCE_COMMIT_MS,
+        )
+        / 1000,
+        max_commit_audio_bytes=max_commit_audio_bytes,
         min_audio_rms=get_float_env(
             "AZURE_OPENAI_REALTIME_MIN_AUDIO_RMS",
             DEFAULT_MIN_AUDIO_RMS,
@@ -137,10 +157,18 @@ def build_proxy_state() -> RealtimeProxyState:
     )
 
 
+def get_audio_duration_seconds(audio_bytes: bytes) -> float:
+    return len(audio_bytes) / (PCM_SAMPLE_RATE * PCM_BYTES_PER_SAMPLE)
+
+
 async def get_auth_headers(credential: DefaultAzureCredential) -> dict[str, str]:
     token_scope = os.getenv("AZURE_OPENAI_TOKEN_SCOPE", DEFAULT_TOKEN_SCOPE)
     token = await credential.get_token(token_scope)
     return {"Authorization": f"Bearer {token.token}"}
+
+
+def supports_audio_commit(protocol: RealtimeUpstreamProtocol) -> bool:
+    return protocol.audio_commit_event_type is not None
 
 
 async def close_if_connected(websocket: WebSocket, code: int, reason: str) -> None:
@@ -174,9 +202,19 @@ async def append_audio_chunk(
     protocol: RealtimeUpstreamProtocol,
 ) -> bool:
     rms = get_pcm16_rms(audio_bytes)
-    if rms < state.min_audio_rms:
-        logger.debug("Skipping low-energy audio chunk: rms=%.5f", rms)
-        return False
+    is_low_energy = rms < state.min_audio_rms
+    if is_low_energy:
+        state.silent_audio_seconds += get_audio_duration_seconds(audio_bytes)
+        if protocol.filter_low_energy_audio:
+            if (
+                protocol.commit_strategy == "silence"
+                and state.uncommitted_audio_bytes >= state.min_commit_audio_bytes
+                and state.silent_audio_seconds >= state.silence_commit_seconds
+            ):
+                await commit_audio_buffer(azure_realtime, state, protocol)
+                state.silent_audio_seconds = 0
+            logger.debug("Skipping low-energy audio chunk: rms=%.5f", rms)
+            return False
 
     audio_event = {
         "type": protocol.audio_append_event_type,
@@ -185,15 +223,24 @@ async def append_audio_chunk(
 
     async with state.send_lock:
         await azure_realtime.send(json.dumps(audio_event))
-        if protocol.auto_commit_audio:
+        if supports_audio_commit(protocol):
             state.uncommitted_audio_bytes += len(audio_bytes)
+            if not is_low_energy:
+                state.silent_audio_seconds = 0
         logger.debug(
             "Appended audio chunk: bytes=%s rms=%.5f pending_bytes=%s",
             len(audio_bytes),
             rms,
             state.uncommitted_audio_bytes,
         )
-        return True
+
+    if (
+        protocol.commit_strategy == "silence"
+        and state.uncommitted_audio_bytes >= state.max_commit_audio_bytes
+    ):
+        await commit_audio_buffer(azure_realtime, state, protocol)
+
+    return True
 
 
 async def commit_audio_buffer(
@@ -203,7 +250,7 @@ async def commit_audio_buffer(
     *,
     force: bool = False,
 ) -> bool:
-    if protocol.audio_commit_event_type is None:
+    if not supports_audio_commit(protocol):
         return False
 
     async with state.send_lock:
@@ -230,6 +277,7 @@ async def commit_audio_buffer(
         state.finalization_event.set()
         state.next_sequence += 1
         state.uncommitted_audio_bytes = 0
+        state.silent_audio_seconds = 0
         return True
 
 
@@ -332,7 +380,7 @@ async def handle_client_control(
 
     event_type = event.get("type")
     if event_type == "stop":
-        if protocol.auto_commit_audio:
+        if supports_audio_commit(protocol):
             await commit_audio_buffer(
                 azure_realtime,
                 state,
@@ -351,7 +399,7 @@ async def handle_client_control(
         return
 
     if event_type == "commit":
-        if not protocol.auto_commit_audio:
+        if not supports_audio_commit(protocol):
             await send_client_event(
                 client,
                 {
@@ -517,7 +565,7 @@ async def proxy_realtime_events(
     )
     tasks = {client_to_azure, azure_to_client}
 
-    if protocol.auto_commit_audio:
+    if protocol.commit_strategy == "fixed":
         tasks.add(
             asyncio.create_task(
                 auto_commit_audio(azure_realtime, state, stop_event, protocol)

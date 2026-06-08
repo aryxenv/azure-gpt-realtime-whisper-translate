@@ -27,6 +27,8 @@ Keeping it simple:
 
 ## Realtime routes
 
-- `/realtime/whisper` proxies audio to the realtime transcription endpoint.
+- `/realtime/whisper` proxies audio to the realtime transcription endpoint. By
+  default it stays thin: append audio chunks and let the endpoint produce
+  transcript events, with a final commit only when the microphone stops.
 - `/realtime/translation` proxies audio to the realtime translation endpoint and
   accepts the target output language from the client websocket query string.

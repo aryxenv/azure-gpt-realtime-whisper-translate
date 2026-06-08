@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_TRANSLATION_MODEL = "gpt-realtime-translate"
 DEFAULT_TRANSLATION_INPUT_TRANSCRIPTION_MODEL = "gpt-realtime-whisper"
 DEFAULT_TRANSLATION_LANGUAGE = "nl"
+DEFAULT_WHISPER_COMMIT_STRATEGY = "none"
+SUPPORTED_TRANSCRIPTION_DELAYS = {"minimal", "low", "medium", "high", "xhigh"}
+SUPPORTED_WHISPER_COMMIT_STRATEGIES = {"fixed", "none", "silence"}
 SUPPORTED_TRANSLATION_LANGUAGES = {
     "nl": "Dutch",
     "en": "English",
@@ -42,13 +45,6 @@ SUPPORTED_TRANSLATION_LANGUAGES = {
     "it": "Italian",
     "pt": "Portuguese",
 }
-WHISPER_UPSTREAM_PROTOCOL = RealtimeUpstreamProtocol(
-    audio_append_event_type="input_audio_buffer.append",
-    audio_commit_event_type="input_audio_buffer.commit",
-    auto_commit_audio=True,
-    force_commit_on_stop=True,
-    wait_for_pending_finalizations_on_stop=True,
-)
 TRANSLATION_UPSTREAM_PROTOCOL = RealtimeUpstreamProtocol(
     audio_append_event_type="session.input_audio_buffer.append",
     session_close_event_type="session.close",
@@ -79,6 +75,49 @@ def get_optional_model_env(name: str, default: str) -> str:
     return value
 
 
+def get_whisper_commit_strategy() -> str:
+    strategy = os.getenv(
+        "AZURE_OPENAI_REALTIME_COMMIT_STRATEGY",
+        DEFAULT_WHISPER_COMMIT_STRATEGY,
+    ).strip().lower()
+    if strategy not in SUPPORTED_WHISPER_COMMIT_STRATEGIES:
+        supported = ", ".join(sorted(SUPPORTED_WHISPER_COMMIT_STRATEGIES))
+        raise ValueError(
+            "AZURE_OPENAI_REALTIME_COMMIT_STRATEGY must be one of: "
+            f"{supported}."
+        )
+
+    return strategy
+
+
+def get_transcription_delay() -> str | None:
+    value = os.getenv("AZURE_OPENAI_REALTIME_TRANSCRIPTION_DELAY")
+    if not value:
+        return None
+
+    delay = value.strip().lower()
+    if delay not in SUPPORTED_TRANSCRIPTION_DELAYS:
+        supported = ", ".join(sorted(SUPPORTED_TRANSCRIPTION_DELAYS))
+        raise ValueError(
+            "AZURE_OPENAI_REALTIME_TRANSCRIPTION_DELAY must be one of: "
+            f"{supported}."
+        )
+
+    return delay
+
+
+def build_whisper_upstream_protocol() -> RealtimeUpstreamProtocol:
+    commit_strategy = get_whisper_commit_strategy()
+    return RealtimeUpstreamProtocol(
+        audio_append_event_type="input_audio_buffer.append",
+        audio_commit_event_type="input_audio_buffer.commit",
+        commit_strategy=commit_strategy,
+        filter_low_energy_audio=commit_strategy != "none",
+        force_commit_on_stop=True,
+        wait_for_pending_finalizations_on_stop=True,
+    )
+
+
 def build_whisper_realtime_url() -> str:
     return f"wss://{get_azure_openai_host()}/openai/v1/realtime?intent=transcription"
 
@@ -100,6 +139,9 @@ def build_whisper_session_update() -> dict[str, Any]:
     language_hint = get_language_hint()
     if language_hint:
         transcription["language"] = language_hint
+    transcription_delay = get_transcription_delay()
+    if transcription_delay:
+        transcription["delay"] = transcription_delay
 
     return {
         "type": "session.update",
@@ -109,7 +151,6 @@ def build_whisper_session_update() -> dict[str, Any]:
                 "input": {
                     "format": {"type": "audio/pcm", "rate": PCM_SAMPLE_RATE},
                     "transcription": transcription,
-                    "turn_detection": None,
                 }
             },
         },
@@ -161,11 +202,17 @@ def assign_item_sequence(
     event: dict[str, Any],
 ) -> dict[str, Any] | None:
     item_id = event.get("item_id")
-    if not item_id or not state.pending_sequences:
+    if not item_id:
         return None
 
-    sequence = state.pending_sequences.popleft()
-    state.item_sequences[item_id] = sequence
+    sequence = state.item_sequences.get(item_id)
+    if sequence is None:
+        if state.pending_sequences:
+            sequence = state.pending_sequences.popleft()
+        else:
+            sequence = state.next_sequence
+            state.next_sequence += 1
+        state.item_sequences[item_id] = sequence
     mark_pending_item_finalization(state, item_id)
     return {
         "type": "audio.committed",
@@ -360,6 +407,7 @@ async def whisper(websocket: WebSocket) -> None:
     try:
         realtime_url = build_whisper_realtime_url()
         session_update = build_whisper_session_update()
+        protocol = build_whisper_upstream_protocol()
     except ValueError as error:
         logger.warning("Invalid realtime configuration: %s", error)
         await close_if_connected(
@@ -374,7 +422,7 @@ async def whisper(websocket: WebSocket) -> None:
         realtime_url,
         session_update,
         normalize_whisper_event,
-        protocol=WHISPER_UPSTREAM_PROTOCOL,
+        protocol=protocol,
     )
 
 
