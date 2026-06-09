@@ -71,14 +71,19 @@ azd up
 
 During `azd up`, Bicep outputs are captured into the azd environment. The hosted
 backend receives the same resource and deployment names as Container Apps
-environment variables, and the post-provision hook still updates local
-`server/.env` so the dev server works after provisioning:
+environment variables, and the post-provision hook updates local env files so
+the dev server and Static Web Apps build use the deployed resources:
 
 ```env
 AZURE_OPENAI_RESOURCE_NAME=<created-resource-name>
 AZURE_OPENAI_REALTIME_DEPLOYMENT=gpt-realtime-whisper
 AZURE_OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate
 AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL=gpt-realtime-whisper
+```
+
+```env
+# .env.production
+VITE_SERVER_URL=<created-container-app-url>
 ```
 
 Authentication is keyless. The infrastructure assigns the current azd principal
