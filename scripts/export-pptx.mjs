@@ -54,22 +54,22 @@ async function cleanPptxPackage(filePath) {
   const zip = await JSZip.loadAsync(await readFile(filePath));
 
   await updateZipText(zip, "ppt/presentation.xml", (xml) =>
-    xml.replace(/(?s:\s*<p:notesMasterIdLst>.*?<\/p:notesMasterIdLst>)/g, ""),
+    xml.replace(/\s*<p:notesMasterIdLst>[\s\S]*?<\/p:notesMasterIdLst>/g, ""),
   );
   await updateZipText(zip, "ppt/_rels/presentation.xml.rels", (xml) =>
     xml.replace(
-      /(?s:\s*<Relationship[^>]+Type="[^"]+\/notesMaster"[^>]*\/>)/g,
+      /\s*<Relationship[^>]+Type="[^"]+\/notesMaster"[^>]*\/>/g,
       "",
     ),
   );
   await updateZipText(zip, "[Content_Types].xml", (xml) =>
     xml
       .replace(
-        /(?s:\s*<Override[^>]+PartName="\/ppt\/notesSlides\/[^"]+"[^>]*\/>)/g,
+        /\s*<Override[^>]+PartName="\/ppt\/notesSlides\/[^"]+"[^>]*\/>/g,
         "",
       )
       .replace(
-        /(?s:\s*<Override[^>]+PartName="\/ppt\/notesMasters\/[^"]+"[^>]*\/>)/g,
+        /\s*<Override[^>]+PartName="\/ppt\/notesMasters\/[^"]+"[^>]*\/>/g,
         "",
       ),
   );
@@ -87,7 +87,7 @@ async function cleanPptxPackage(filePath) {
     if (/^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(fileName)) {
       await updateZipText(zip, fileName, (xml) =>
         xml.replace(
-          /(?s:\s*<Relationship[^>]+Type="[^"]+\/notesSlide"[^>]*\/>)/g,
+          /\s*<Relationship[^>]+Type="[^"]+\/notesSlide"[^>]*\/>/g,
           "",
         ),
       );
