@@ -8,11 +8,11 @@ services:
     uses:
       - api
   api:
-    project: ./server
+    project: .
     language: docker
     host: containerapp
     docker:
-      path: Dockerfile
+      path: server/Dockerfile
       remoteBuild: true
 infra:
   provider: bicep
