@@ -9,15 +9,14 @@ import { cn } from "@/lib/utils";
 type ExportKind = "pdf" | "pptx" | "pages" | "azure";
 type ExportBadge = "Static" | "Private" | "Interactive" | "Public" | "Server";
 
-const azureDeployCommand = "azd up";
-const azureUrlCommand = "npm run azure:url";
-
-const exportOptions: Array<{
+interface ExportOption {
   id: ExportKind;
   title: string;
   badges: ExportBadge[];
   info: string;
-}> = [
+}
+
+const fileExportOptions: ExportOption[] = [
   {
     id: "pdf",
     title: "PDF",
@@ -30,19 +29,26 @@ const exportOptions: Array<{
     badges: ["Static", "Private"],
     info: "Save a local PowerPoint artifact to exports/webslides.pptx and download it.",
   },
-  {
-    id: "pages",
-    title: "GitHub Pages",
-    badges: ["Interactive", "Public"],
-    info: "Publish the interactive deck with the existing GitHub Actions workflow.",
-  },
-  {
-    id: "azure",
-    title: "Azure",
-    badges: ["Interactive", "Public", "Server"],
-    info: "Deploy the interactive deck and server-backed demos to Azure with azd.",
-  },
 ];
+
+const devExportOptions: ExportOption[] = import.meta.env.DEV
+  ? [
+      {
+        id: "pages",
+        title: "GitHub Pages",
+        badges: ["Interactive", "Public"],
+        info: "Publish the interactive deck with the existing GitHub Actions workflow.",
+      },
+      {
+        id: "azure",
+        title: "Azure",
+        badges: ["Interactive", "Public", "Server"],
+        info: "Deploy the interactive deck and server-backed demos to Azure with azd.",
+      },
+    ]
+  : [];
+
+const visibleExportOptions = [...fileExportOptions, ...devExportOptions];
 
 function ExportIcon() {
   return (
@@ -224,32 +230,6 @@ function FileExportDialogContent({
   );
 }
 
-function PagesDialogContent() {
-  return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-border bg-card p-4 text-sm leading-6 text-muted-foreground">
-        GitHub Pages keeps the deck interactive, but the published URL is
-        public. Use this only for decks with no customer-specific data or
-        local-only demo dependencies.
-      </div>
-      <ol className="list-decimal space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
-        <li>
-          In GitHub, set <strong>Settings → Pages</strong> source to{" "}
-          <strong>GitHub Actions</strong>.
-        </li>
-        <li>Push changes to main so the existing Pages workflow runs.</li>
-        <li>
-          Share{" "}
-          <code className="rounded bg-muted px-1.5 py-0.5 text-foreground">
-            https://&lt;owner&gt;.github.io/&lt;repo&gt;/
-          </code>
-          .
-        </li>
-      </ol>
-    </div>
-  );
-}
-
 type CopyStatus = "idle" | "success" | "error";
 
 function CopyIcon({ className }: { className?: string }) {
@@ -362,28 +342,57 @@ function CommandBlock({ command, label }: { command: string; label: string }) {
   );
 }
 
-function AzureDialogContent() {
-  return (
-    <div className="space-y-4">
-      <div className="rounded-lg border border-border bg-card p-4 text-sm leading-6 text-muted-foreground">
-        From the repo root, run{" "}
-        <code className="rounded bg-muted px-1.5 py-0.5 text-foreground">
-          azd up
-        </code>
-        . That provisions the Foundry models, deploys the FastAPI backend, and
-        publishes the interactive deck to Azure Static Web Apps.
-      </div>
-      <CommandBlock
-        command={azureDeployCommand}
-        label="Deploy from repo root"
-      />
-      <CommandBlock
-        command={azureUrlCommand}
-        label="After azd up finishes, print the Static Web App URL"
-      />
-    </div>
-  );
-}
+const DevDialogContent = import.meta.env.DEV
+  ? function DevDialogContent({ dialog }: { dialog: ExportKind | null }) {
+      if (dialog === "pages") {
+        return (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-card p-4 text-sm leading-6 text-muted-foreground">
+              GitHub Pages keeps the deck interactive, but the published URL is
+              public. Use this only for decks with no customer-specific data or
+              local-only demo dependencies.
+            </div>
+            <ol className="list-decimal space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
+              <li>
+                In GitHub, set <strong>Settings → Pages</strong> source to{" "}
+                <strong>GitHub Actions</strong>.
+              </li>
+              <li>Push changes to main so the existing Pages workflow runs.</li>
+              <li>
+                Share{" "}
+                <code className="rounded bg-muted px-1.5 py-0.5 text-foreground">
+                  https://&lt;owner&gt;.github.io/&lt;repo&gt;/
+                </code>
+                .
+              </li>
+            </ol>
+          </div>
+        );
+      }
+
+      if (dialog === "azure") {
+        return (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-border bg-card p-4 text-sm leading-6 text-muted-foreground">
+              From the repo root, run{" "}
+              <code className="rounded bg-muted px-1.5 py-0.5 text-foreground">
+                azd up
+              </code>
+              . That provisions the Foundry models, deploys the FastAPI backend,
+              and publishes the interactive deck to Azure Static Web Apps.
+            </div>
+            <CommandBlock command="azd up" label="Deploy from repo root" />
+            <CommandBlock
+              command="npm run azure:url"
+              label="After azd up finishes, print the Static Web App URL"
+            />
+          </div>
+        );
+      }
+
+      return null;
+    }
+  : null;
 
 export function ExportDialog() {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -399,6 +408,10 @@ export function ExportDialog() {
   const [pptxMessage, setPptxMessage] = useState("");
 
   function selectDialog(dialog: ExportKind) {
+    if (!visibleExportOptions.some((option) => option.id === dialog)) {
+      return;
+    }
+
     setMenuOpen(false);
     setActiveDialog(dialog);
     setDialogOpen(true);
@@ -434,9 +447,10 @@ export function ExportDialog() {
     }
   }
 
-  const activeOption = exportOptions.find(
+  const activeOption = visibleExportOptions.find(
     (option) => option.id === activeDialog,
   );
+  const visibleActiveDialog = activeOption ? activeDialog : null;
 
   return (
     <>
@@ -460,7 +474,7 @@ export function ExportDialog() {
             sideOffset={10}
           >
             <div className="grid gap-1">
-              {exportOptions.map((option) => (
+              {visibleExportOptions.map((option) => (
                 <ExportMenuOption
                   key={option.id}
                   badges={option.badges}
@@ -484,7 +498,7 @@ export function ExportDialog() {
         open={dialogOpen}
         title={activeOption?.title ?? "Export"}
       >
-        {activeDialog === "pdf" ? (
+        {visibleActiveDialog === "pdf" ? (
           <FileExportDialogContent
             buttonLabel="Download PDF"
             exportingLabel="Exporting PDF..."
@@ -494,7 +508,7 @@ export function ExportDialog() {
             status={pdfStatus}
           />
         ) : null}
-        {activeDialog === "pptx" ? (
+        {visibleActiveDialog === "pptx" ? (
           <FileExportDialogContent
             buttonLabel="Download PPTX"
             exportingLabel="Exporting PPTX..."
@@ -504,8 +518,9 @@ export function ExportDialog() {
             status={pptxStatus}
           />
         ) : null}
-        {activeDialog === "pages" ? <PagesDialogContent /> : null}
-        {activeDialog === "azure" ? <AzureDialogContent /> : null}
+        {DevDialogContent ? (
+          <DevDialogContent dialog={visibleActiveDialog} />
+        ) : null}
       </DialogShell>
     </>
   );

@@ -156,6 +156,10 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
               name: 'AZURE_CLIENT_ID'
               value: apiIdentity.properties.clientId
             }
+            {
+              name: 'WEBSLIDES_EXPORT_ALLOWED_HOSTS'
+              value: web.properties.defaultHostname
+            }
           ]
           resources: {
             cpu: json('0.5')

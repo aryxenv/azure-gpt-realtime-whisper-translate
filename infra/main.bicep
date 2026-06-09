@@ -93,6 +93,7 @@ output AZURE_OPENAI_REALTIME_DEPLOYMENT string = whisperDeploymentName
 output AZURE_OPENAI_REALTIME_TRANSLATION_MODEL string = translateDeploymentName
 output AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL string = whisperDeploymentName
 output VITE_SERVER_URL string = hosting.outputs.apiUrl
+output AZURE_STATIC_WEB_APP_HOSTNAME string = hosting.outputs.staticWebAppDefaultHostname
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = hosting.outputs.containerRegistryEndpoint
 output AZURE_STATIC_WEB_APP_NAME string = hosting.outputs.staticWebAppName
 output AZURE_CONTAINER_APP_NAME string = hosting.outputs.containerAppName
