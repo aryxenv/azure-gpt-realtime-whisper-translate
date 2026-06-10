@@ -29,9 +29,6 @@ param deploymentSkuName string = 'GlobalStandard'
 @description('Deployment capacity for each realtime model deployment.')
 param deploymentCapacity int = 5
 
-@description('Azure region for Static Web Apps. Keep this separate because Static Web Apps has a smaller region list than Azure OpenAI.')
-param staticWebAppLocation string = 'westeurope'
-
 @description('Name of the Azure AI Foundry project.')
 param foundryProjectName string = 'ai-project-${environmentName}'
 
@@ -74,7 +71,6 @@ module hosting './modules/hosting.bicep' = {
     environmentName: environmentName
     resourceSuffix: resourceSuffix
     containerAppLocation: location
-    staticWebAppLocation: staticWebAppLocation
     tags: tags
     principalId: principalId
     openAiResourceName: foundry.outputs.openAiResourceName
@@ -93,7 +89,10 @@ output AZURE_OPENAI_REALTIME_DEPLOYMENT string = whisperDeploymentName
 output AZURE_OPENAI_REALTIME_TRANSLATION_MODEL string = translateDeploymentName
 output AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL string = whisperDeploymentName
 output VITE_SERVER_URL string = hosting.outputs.apiUrl
-output AZURE_STATIC_WEB_APP_HOSTNAME string = hosting.outputs.staticWebAppDefaultHostname
+output WEBSLIDES_EXPORT_ALLOWED_HOSTS string = hosting.outputs.webHostname
 output AZURE_CONTAINER_REGISTRY_ENDPOINT string = hosting.outputs.containerRegistryEndpoint
-output AZURE_STATIC_WEB_APP_NAME string = hosting.outputs.staticWebAppName
-output AZURE_CONTAINER_APP_NAME string = hosting.outputs.containerAppName
+output AZURE_CONTAINER_APP_NAME string = hosting.outputs.apiContainerAppName
+output AZURE_API_CONTAINER_APP_NAME string = hosting.outputs.apiContainerAppName
+output AZURE_WEB_CONTAINER_APP_NAME string = hosting.outputs.webContainerAppName
+output AZURE_API_CONTAINER_APP_HOSTNAME string = hosting.outputs.apiHostname
+output AZURE_WEB_CONTAINER_APP_HOSTNAME string = hosting.outputs.webHostname

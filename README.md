@@ -44,19 +44,20 @@ Azure AI Foundry resource and project in **France Central** and deploys:
 
 It also deploys the demo app:
 
-- the Webslides frontend on Azure Static Web Apps;
+- the Webslides frontend on Azure Container Apps;
 - the FastAPI realtime proxy on Azure Container Apps;
-- the backend Container App with `minReplicas: 1` and `maxReplicas: 1`.
+- frontend and backend Container Apps with `minReplicas: 1` and `maxReplicas: 1`.
 
-The backend container image is built remotely by Azure Container Registry Tasks
-during `azd deploy`/`azd up`, so the image architecture comes from Azure instead
-of your laptop CPU.
+The frontend and backend container images are built remotely by Azure Container
+Registry Tasks during `azd deploy`/`azd up`, so the image architecture comes
+from Azure instead of your laptop CPU.
 
 Before running provisioning, confirm the subscription has available
 GlobalStandard realtime model quota in France Central. If another deployment
 already consumes the quota, keep using that existing resource or free capacity
-outside this workflow before running `azd up`. The hosted backend is always-on,
-so it has a small ongoing Container Apps cost even when no one is presenting.
+outside this workflow before running `azd up`. The hosted frontend and backend
+are always-on, so they have a small ongoing Container Apps cost even when no one
+is presenting.
 
 Sign in, create/select an azd environment, then provision. The azd preprovision
 hook defaults `AZURE_LOCATION` to `francecentral` because the realtime model
@@ -71,8 +72,8 @@ azd up
 
 During `azd up`, Bicep outputs are captured into the azd environment. The hosted
 backend receives the same resource and deployment names as Container Apps
-environment variables, and the post-provision hook updates local env files so
-the dev server and Static Web Apps build use the deployed resources:
+environment variables, and the post-provision hook updates local server env
+files for local development:
 
 ```env
 AZURE_OPENAI_RESOURCE_NAME=<created-resource-name>
@@ -81,10 +82,10 @@ AZURE_OPENAI_REALTIME_TRANSLATION_MODEL=gpt-realtime-translate
 AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL=gpt-realtime-whisper
 ```
 
-```env
-# .env.production
-VITE_SERVER_URL=<created-container-app-url>
-```
+The hosted frontend receives the backend URL as a Container App environment
+variable and writes it to `env-config.js` when the frontend container starts.
+That keeps the deck from baking a stale backend URL into the Vite bundle during
+`azd up`.
 
 Authentication is keyless. The infrastructure assigns the current azd principal
 and the hosted backend identity the `Cognitive Services OpenAI User` role on the
@@ -155,9 +156,8 @@ proxy path before being sent to the configured Azure Realtime endpoint.
 Generated files in `exports/` are ignored by git so private presentation
 artifacts are not pushed accidentally.
 
-Azure Static Web Apps can host the interactive deck with the live FastAPI-backed
-demo through the hosted Container Apps backend. GitHub Pages remains a static
-deck-only option.
+Azure Container Apps can host the interactive deck with the live FastAPI-backed
+demo. GitHub Pages remains a static deck-only option.
 
 ## Customize the deck
 

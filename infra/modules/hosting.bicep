@@ -6,11 +6,8 @@ param environmentName string
 @description('Short deterministic suffix shared with other resources.')
 param resourceSuffix string
 
-@description('Azure region for the Container Apps backend.')
+@description('Azure region for the Container Apps resources.')
 param containerAppLocation string = resourceGroup().location
-
-@description('Azure region for the Static Web Apps frontend.')
-param staticWebAppLocation string = 'westeurope'
 
 @description('Tags applied to Azure resources.')
 param tags object = {}
@@ -31,11 +28,11 @@ var cleanedEnvironmentName = take(replace(replace(replace(toLower(environmentNam
 var serviceTags = union(tags, {
   hosting: 'webslides'
 })
-var apiServiceTags = union(serviceTags, {
-  'azd-service-name': 'api'
-})
 var webServiceTags = union(serviceTags, {
   'azd-service-name': 'web'
+})
+var apiServiceTags = union(serviceTags, {
+  'azd-service-name': 'api'
 })
 var cognitiveServicesOpenAiUserRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
@@ -49,6 +46,9 @@ var acrPushRoleDefinitionId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '8311e382-0749-4cb8-b61a-304f252e45ec'
 )
+var containerAppNameBase = take(cleanedEnvironmentName, 14)
+var webContainerAppName = 'ca-${containerAppNameBase}-${resourceSuffix}-web'
+var apiContainerAppName = 'ca-${containerAppNameBase}-${resourceSuffix}-api'
 
 resource openAi 'Microsoft.CognitiveServices/accounts@2024-10-01' existing = {
   name: openAiResourceName
@@ -65,6 +65,12 @@ resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
     adminUserEnabled: false
     publicNetworkAccess: 'Enabled'
   }
+}
+
+resource webIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-${cleanedEnvironmentName}-${resourceSuffix}-web'
+  location: containerAppLocation
+  tags: webServiceTags
 }
 
 resource apiIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
@@ -100,8 +106,68 @@ resource containerEnvironment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
+var webHostname = '${webContainerAppName}.${containerEnvironment.properties.defaultDomain}'
+var apiHostname = '${apiContainerAppName}.${containerEnvironment.properties.defaultDomain}'
+var webUrl = 'https://${webHostname}'
+var apiUrl = 'https://${apiHostname}'
+
+resource web 'Microsoft.App/containerApps@2024-03-01' = {
+  name: webContainerAppName
+  location: containerAppLocation
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: {
+      '${webIdentity.id}': {}
+    }
+  }
+  tags: webServiceTags
+  dependsOn: [
+    webRegistryPullAccess
+  ]
+  properties: {
+    managedEnvironmentId: containerEnvironment.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        allowInsecure: false
+        targetPort: 80
+        transport: 'auto'
+      }
+      registries: [
+        {
+          server: registry.properties.loginServer
+          identity: webIdentity.id
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'web'
+          image: 'mcr.microsoft.com/azuredocs/containerapps-helloworld:latest'
+          env: [
+            {
+              name: 'VITE_SERVER_URL'
+              value: apiUrl
+            }
+          ]
+          resources: {
+            cpu: json('0.5')
+            memory: '1.0Gi'
+          }
+        }
+      ]
+      scale: {
+        minReplicas: 1
+        maxReplicas: 1
+      }
+    }
+  }
+}
+
 resource api 'Microsoft.App/containerApps@2024-03-01' = {
-  name: 'ca-${cleanedEnvironmentName}-${resourceSuffix}'
+  name: apiContainerAppName
   location: containerAppLocation
   identity: {
     type: 'UserAssigned'
@@ -158,7 +224,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
             }
             {
               name: 'WEBSLIDES_EXPORT_ALLOWED_HOSTS'
-              value: web.properties.defaultHostname
+              value: webHostname
             }
           ]
           resources: {
@@ -172,6 +238,16 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
         maxReplicas: 1
       }
     }
+  }
+}
+
+resource webRegistryPullAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(registry.id, webIdentity.name, acrPullRoleDefinitionId)
+  scope: registry
+  properties: {
+    roleDefinitionId: acrPullRoleDefinitionId
+    principalId: webIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 
@@ -204,21 +280,10 @@ resource publisherRegistryPushAccess 'Microsoft.Authorization/roleAssignments@20
   }
 }
 
-resource web 'Microsoft.Web/staticSites@2024-04-01' = {
-  name: 'stapp-${cleanedEnvironmentName}-${resourceSuffix}'
-  location: staticWebAppLocation
-  tags: webServiceTags
-  sku: {
-    name: 'Free'
-    tier: 'Free'
-  }
-  properties: {
-    provider: 'None'
-  }
-}
-
-output apiUrl string = 'https://${api.properties.configuration.ingress.fqdn}'
+output apiUrl string = apiUrl
+output webUrl string = webUrl
+output apiHostname string = apiHostname
+output webHostname string = webHostname
 output containerRegistryEndpoint string = registry.properties.loginServer
-output containerAppName string = api.name
-output staticWebAppName string = web.name
-output staticWebAppDefaultHostname string = web.properties.defaultHostname
+output apiContainerAppName string = api.name
+output webContainerAppName string = web.name

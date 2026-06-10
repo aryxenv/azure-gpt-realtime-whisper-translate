@@ -56,46 +56,47 @@ if (!environmentName) {
   );
 }
 
-let staticWebAppName = env.get("AZURE_STATIC_WEB_APP_NAME");
-if (!staticWebAppName) {
-  staticWebAppName = run("az", [
-    "resource",
-    "list",
+let hostname = env.get("AZURE_WEB_CONTAINER_APP_HOSTNAME");
+let webContainerAppName = env.get("AZURE_WEB_CONTAINER_APP_NAME");
+if (!hostname) {
+  if (!webContainerAppName) {
+    webContainerAppName = run("az", [
+      "resource",
+      "list",
+      "--resource-group",
+      resourceGroup,
+      "--resource-type",
+      "Microsoft.App/containerApps",
+      "--query",
+      "[?tags.\"azd-service-name\"=='web'] | [0].name",
+      "-o",
+      "tsv",
+    ]);
+  }
+
+  if (!webContainerAppName) {
+    throw new Error(
+      `No web Container App found in resource group ${resourceGroup}.`,
+    );
+  }
+
+  hostname = run("az", [
+    "containerapp",
+    "show",
     "--resource-group",
     resourceGroup,
-    "--resource-type",
-    "Microsoft.Web/staticSites",
+    "--name",
+    webContainerAppName,
     "--query",
-    "[0].name",
+    "properties.configuration.ingress.fqdn",
     "-o",
     "tsv",
   ]);
 }
 
-if (!staticWebAppName) {
-  throw new Error(
-    `No Static Web App found in resource group ${resourceGroup}.`,
-  );
-}
-
-const hostname = run("az", [
-  "resource",
-  "show",
-  "--resource-group",
-  resourceGroup,
-  "--name",
-  staticWebAppName,
-  "--resource-type",
-  "Microsoft.Web/staticSites",
-  "--query",
-  "properties.defaultHostname",
-  "-o",
-  "tsv",
-]);
-
 if (!hostname) {
   throw new Error(
-    `Static Web App ${staticWebAppName} does not have a hostname yet.`,
+    `Web Container App ${webContainerAppName} does not have a hostname yet.`,
   );
 }
 

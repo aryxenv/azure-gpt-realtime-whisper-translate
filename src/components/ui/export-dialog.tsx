@@ -379,12 +379,12 @@ const DevDialogContent = import.meta.env.DEV
                 azd up
               </code>
               . That provisions the Foundry models, deploys the FastAPI backend,
-              and publishes the interactive deck to Azure Static Web Apps.
+              and publishes the interactive deck to Azure Container Apps.
             </div>
             <CommandBlock command="azd up" label="Deploy from repo root" />
             <CommandBlock
               command="npm run azure:url"
-              label="After azd up finishes, print the Static Web App URL"
+              label="After azd up finishes, print the web app URL"
             />
           </div>
         );
