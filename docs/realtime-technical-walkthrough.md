@@ -18,10 +18,10 @@ contract and the model session type.
 
 There are two different contracts:
 
-| Demo | OpenAI Realtime API endpoint contract | Model role | Audio append event | Stop/finalize event | Transcript event shape |
-| --- | --- | --- | --- | --- | --- |
-| Standalone transcription | `/openai/v1/realtime?intent=transcription` | `gpt-realtime-whisper` deployment transcribes input audio | `input_audio_buffer.append` | `input_audio_buffer.commit` plus local drain | Item-scoped `conversation.item.input_audio_transcription.*` |
-| Translation | `/openai/v1/realtime/translations?model=gpt-realtime-translate` | `gpt-realtime-translate` translates; input transcription is configured as `gpt-realtime-whisper` | `session.input_audio_buffer.append` | `session.close`, then wait for `session.closed` | Session-scoped `session.input_transcript.*` and `session.output_transcript.*` |
+| Demo                     | OpenAI Realtime API endpoint contract                           | Model role                                                                                       | Audio append event                  | Stop/finalize event                             | Transcript event shape                                                        |
+| ------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------- |
+| Standalone transcription | `/openai/v1/realtime?intent=transcription`                      | `gpt-realtime-whisper` deployment transcribes input audio                                        | `input_audio_buffer.append`         | `input_audio_buffer.commit` plus local drain    | Item-scoped `conversation.item.input_audio_transcription.*`                   |
+| Translation              | `/openai/v1/realtime/translations?model=gpt-realtime-translate` | `gpt-realtime-translate` translates; input transcription is configured as `gpt-realtime-whisper` | `session.input_audio_buffer.append` | `session.close`, then wait for `session.closed` | Session-scoped `session.input_transcript.*` and `session.output_transcript.*` |
 
 That distinction explains the debugging result: the translation route can show a
 better raw input transcript even though it uses `gpt-realtime-whisper` for input
@@ -367,14 +367,14 @@ https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c77
 What it does:
 
 - If endpoint-owned turn detection is configured, it creates a protocol with:
-    - append event `input_audio_buffer.append`;
-    - no manual commit event.
+  - append event `input_audio_buffer.append`;
+  - no manual commit event.
 - Otherwise it creates a manual-commit protocol with:
-    - append event `input_audio_buffer.append`;
-    - commit event `input_audio_buffer.commit`;
-    - configured commit strategy, defaulting to `silence`;
-    - `force_commit_on_stop=True`;
-    - `wait_for_pending_finalizations_on_stop=True`.
+  - append event `input_audio_buffer.append`;
+  - commit event `input_audio_buffer.commit`;
+  - configured commit strategy, defaulting to `silence`;
+  - `force_commit_on_stop=True`;
+  - `wait_for_pending_finalizations_on_stop=True`.
 
 Why this function is central to quality:
 
@@ -649,9 +649,9 @@ What they do:
 
 - Read text from `delta`, `text`, or `transcript`.
 - Convert item-scoped upstream deltas into:
-    - `{ type: "transcript.delta", delta, itemId, sequence }`.
+  - `{ type: "transcript.delta", delta, itemId, sequence }`.
 - Convert item-scoped upstream finals into:
-    - `{ type: "transcript.completed", transcript, itemId, sequence }`.
+  - `{ type: "transcript.completed", transcript, itemId, sequence }`.
 - Mark item IDs as pending on deltas and finalized on completed events.
 
 Why completed events are not optional:
@@ -1303,23 +1303,23 @@ Where the fix is encoded:
 
 ## Configuration reference
 
-| Variable | Used by | Purpose |
-| --- | --- | --- |
-| `AZURE_OPENAI_RESOURCE_NAME` | `get_azure_openai_host` | Builds `<resource>.openai.azure.com` for the hosted OpenAI Realtime API websocket. |
-| `AZURE_OPENAI_TOKEN_SCOPE` | `get_auth_headers` | Optional token scope override; defaults to Cognitive Services. |
-| `AZURE_OPENAI_REALTIME_DEPLOYMENT` | `build_whisper_session_update` | Standalone Whisper transcription model/deployment. |
-| `AZURE_OPENAI_REALTIME_LANGUAGE_HINT` | `get_language_hint` | Optional single-language hint for standalone transcription. |
-| `AZURE_OPENAI_REALTIME_TRANSCRIPTION_DELAY` | `get_transcription_delay` | Optional guarded transcription delay value. |
-| `AZURE_OPENAI_REALTIME_TURN_DETECTION` | `build_whisper_turn_detection` | Future guarded endpoint-owned turn detection mode. Defaults to `none`. |
-| `AZURE_OPENAI_REALTIME_COMMIT_STRATEGY` | `build_whisper_upstream_protocol` | Manual commit strategy. Defaults to `silence`; `none` is retained as an advanced stop-time commit experiment. |
-| `AZURE_OPENAI_REALTIME_MIN_COMMIT_AUDIO_MS` | `build_proxy_state` | Minimum audio window before normal commit. |
-| `AZURE_OPENAI_REALTIME_MAX_COMMIT_AUDIO_MS` | `build_proxy_state` | Max audio window fallback for long speech. |
-| `AZURE_OPENAI_REALTIME_SILENCE_COMMIT_MS` | `build_proxy_state` | Pause duration used by silence commit strategy. |
-| `AZURE_OPENAI_REALTIME_STOP_DRAIN_MS` | `build_proxy_state` | Max wait for finals or `session.closed` on stop. |
-| `AZURE_OPENAI_REALTIME_TRANSLATION_MODEL` | `build_translation_realtime_url` | Translation session model, default `gpt-realtime-translate`. |
-| `AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL` | `build_translation_session_update` | Input transcription model inside translation session, default `gpt-realtime-whisper`. |
-| `VITE_REALTIME_WS_URL` | transcription slide | Local browser websocket override for Whisper demo. |
-| `VITE_REALTIME_TRANSLATION_WS_URL` | translation slide | Local browser websocket override for translation demo. |
+| Variable                                                      | Used by                            | Purpose                                                                                                       |
+| ------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `AZURE_OPENAI_RESOURCE_NAME`                                  | `get_azure_openai_host`            | Builds `<resource>.openai.azure.com` for the hosted OpenAI Realtime API websocket.                            |
+| `AZURE_OPENAI_TOKEN_SCOPE`                                    | `get_auth_headers`                 | Optional token scope override; defaults to Cognitive Services.                                                |
+| `AZURE_OPENAI_REALTIME_DEPLOYMENT`                            | `build_whisper_session_update`     | Standalone Whisper transcription model/deployment.                                                            |
+| `AZURE_OPENAI_REALTIME_LANGUAGE_HINT`                         | `get_language_hint`                | Optional single-language hint for standalone transcription.                                                   |
+| `AZURE_OPENAI_REALTIME_TRANSCRIPTION_DELAY`                   | `get_transcription_delay`          | Optional guarded transcription delay value.                                                                   |
+| `AZURE_OPENAI_REALTIME_TURN_DETECTION`                        | `build_whisper_turn_detection`     | Future guarded endpoint-owned turn detection mode. Defaults to `none`.                                        |
+| `AZURE_OPENAI_REALTIME_COMMIT_STRATEGY`                       | `build_whisper_upstream_protocol`  | Manual commit strategy. Defaults to `silence`; `none` is retained as an advanced stop-time commit experiment. |
+| `AZURE_OPENAI_REALTIME_MIN_COMMIT_AUDIO_MS`                   | `build_proxy_state`                | Minimum audio window before normal commit.                                                                    |
+| `AZURE_OPENAI_REALTIME_MAX_COMMIT_AUDIO_MS`                   | `build_proxy_state`                | Max audio window fallback for long speech.                                                                    |
+| `AZURE_OPENAI_REALTIME_SILENCE_COMMIT_MS`                     | `build_proxy_state`                | Pause duration used by silence commit strategy.                                                               |
+| `AZURE_OPENAI_REALTIME_STOP_DRAIN_MS`                         | `build_proxy_state`                | Max wait for finals or `session.closed` on stop.                                                              |
+| `AZURE_OPENAI_REALTIME_TRANSLATION_MODEL`                     | `build_translation_realtime_url`   | Translation session model, default `gpt-realtime-translate`.                                                  |
+| `AZURE_OPENAI_REALTIME_TRANSLATION_INPUT_TRANSCRIPTION_MODEL` | `build_translation_session_update` | Input transcription model inside translation session, default `gpt-realtime-whisper`.                         |
+| `VITE_REALTIME_WS_URL`                                        | transcription slide                | Local browser websocket override for Whisper demo.                                                            |
+| `VITE_REALTIME_TRANSLATION_WS_URL`                            | translation slide                  | Local browser websocket override for translation demo.                                                        |
 
 Per-session translation query params:
 
@@ -1332,16 +1332,16 @@ Per-session Whisper query params:
 
 ## Troubleshooting guide
 
-| Symptom | Where to look | Reasoning |
-| --- | --- | --- |
-| Browser asks for mic but then fails | `startRealtimeAudioCapture` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/src/lib/realtime-audio.ts#L69-L140 | Failure can happen in `getUserMedia`, websocket open, or AudioContext setup. |
-| Slide never reaches listening | `run_realtime_proxy` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L433-L487 | The server only sends `connected` after auth, upstream websocket open, and `session.update` send. |
-| Translation says unsupported target language | `get_translation_target_language` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L204-L218 | The server rejects target languages outside the supported set. |
-| Protocol error says unsupported append/commit event | `TRANSLATION_UPSTREAM_PROTOCOL` and `build_whisper_upstream_protocol` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L51-L56 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L142-L157 | Whisper and Translate use different OpenAI Realtime event namespaces. |
-| Translation loses the final tail | `handle_client_control`, `wait_for_session_closed`, `normalize_translation_event` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/utils/realtime.py#L392-L433 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/utils/realtime.py#L370-L378 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L384-L430 | Translation stop must send `session.close` and drain until `session.closed`. |
-| Whisper has language drift or mixed scripts | `append_audio_chunk`, `commit_audio_buffer`, `build_whisper_upstream_protocol` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/utils/realtime.py#L200-L299 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L142-L157 | Commit windows may be too large for the spoken-language mix. |
-| Transcript shows partial text instead of corrected final text | `normalize_transcription_completed`, `applyTranscriptEvent` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L322-L335 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/src/lib/realtime-transcript.ts#L78-L111 | Completed item events must replace the draft segment, not append blindly. |
-| Transcript order is wrong | `get_or_assign_item_sequence`, `getTranscriptText` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L261-L280 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/src/lib/realtime-transcript.ts#L113-L121 | Item finals can arrive out of order; sequence metadata preserves display order. |
+| Symptom                                                       | Where to look                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Reasoning                                                                                         |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Browser asks for mic but then fails                           | `startRealtimeAudioCapture` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/src/lib/realtime-audio.ts#L69-L140                                                                                                                                                                                                                                                                                                                                                          | Failure can happen in `getUserMedia`, websocket open, or AudioContext setup.                      |
+| Slide never reaches listening                                 | `run_realtime_proxy` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L433-L487                                                                                                                                                                                                                                                                                                                                                            | The server only sends `connected` after auth, upstream websocket open, and `session.update` send. |
+| Translation says unsupported target language                  | `get_translation_target_language` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L204-L218                                                                                                                                                                                                                                                                                                                                               | The server rejects target languages outside the supported set.                                    |
+| Protocol error says unsupported append/commit event           | `TRANSLATION_UPSTREAM_PROTOCOL` and `build_whisper_upstream_protocol` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L51-L56 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L142-L157                                                                                                                                                             | Whisper and Translate use different OpenAI Realtime event namespaces.                             |
+| Translation loses the final tail                              | `handle_client_control`, `wait_for_session_closed`, `normalize_translation_event` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/utils/realtime.py#L392-L433 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/utils/realtime.py#L370-L378 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L384-L430 | Translation stop must send `session.close` and drain until `session.closed`.                      |
+| Whisper has language drift or mixed scripts                   | `append_audio_chunk`, `commit_audio_buffer`, `build_whisper_upstream_protocol` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/utils/realtime.py#L200-L299 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L142-L157                                                                                                                                                   | Commit windows may be too large for the spoken-language mix.                                      |
+| Transcript shows partial text instead of corrected final text | `normalize_transcription_completed`, `applyTranscriptEvent` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L322-L335 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/src/lib/realtime-transcript.ts#L78-L111                                                                                                                                                                     | Completed item events must replace the draft segment, not append blindly.                         |
+| Transcript order is wrong                                     | `get_or_assign_item_sequence`, `getTranscriptText` https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/server/src/router/realtime.py#L261-L280 https://github.com/aryxenv/gpt-realtime-whisper-translate/blob/9b2e3f6a197455c770cd748a7796e557ac04009f/src/lib/realtime-transcript.ts#L113-L121                                                                                                                                                                             | Item finals can arrive out of order; sequence metadata preserves display order.                   |
 
 ## Extension points
 
