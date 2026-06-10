@@ -34,4 +34,6 @@ Keeping it simple:
   client websocket query string.
 - `/realtime/translation` proxies audio to the realtime translation endpoint and
   accepts the target output language from the client websocket query string. It
-  uses the translation session lifecycle and drains after `session.close`.
+  forwards real low-energy microphone frames so the endpoint can detect natural
+  utterance boundaries, then uses the translation session lifecycle and drains
+  after `session.close`.

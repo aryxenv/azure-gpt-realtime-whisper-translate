@@ -76,6 +76,9 @@ SUPPORTED_TRANSLATION_LANGUAGES = {
 TRANSLATION_UPSTREAM_PROTOCOL = RealtimeUpstreamProtocol(
     audio_append_event_type="session.input_audio_buffer.append",
     session_close_event_type="session.close",
+    # Preserve real trailing quiet so the translation endpoint can detect
+    # utterance boundaries without synthetic silence padding.
+    filter_low_energy_audio=False,
     close_session_before_drain=True,
     wait_for_session_closed_on_stop=True,
 )
